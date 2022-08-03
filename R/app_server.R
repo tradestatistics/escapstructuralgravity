@@ -13,7 +13,7 @@
 #' @importFrom lubridate day year
 #' @importFrom rio import export
 #' @importFrom rlang sym
-#' @importFrom stats as.formula predict quasipoisson weighted.mean
+#' @importFrom stats as.formula predict quasipoisson
 #' @importFrom shinyhelper helper observe_helpers
 #' @importFrom shinyjs hide show
 #' @importFrom tidyr pivot_longer
@@ -312,38 +312,63 @@ app_server <- function(input, output, session) {
       d <- gdp_deflator_adjustment_model(d, as.integer(inp_d()), sql_con = con)
     }
 
-    ### 3.8. add MFN data ----
+    ### 3.8. add tariffs data ----
 
-    if (any(c(raw_rhs(), rhs()) %in% "mfn")) {
+    # here we need the applied tariffs when the product gets to destination
+
+    if (any(c(raw_rhs(), rhs()) %in% "tariff")) {
       tar <- tbl(con, "tariffs") %>%
         filter(
           !!sym("year") %in% !!inp_y()
         ) %>%
-        select(!!sym("year"), !!sym("reporter_iso"), !!sym("commodity_code"),
-               !!sym("simple_average"))
+        select(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
+               !!sym("section_code"), !!sym("commodity_code"),
+               !!sym("tariff"))
 
-      trd <- tbl(con, "yrc") %>%
+      trd <- tbl(con, "yrpc") %>%
         filter(
           !!sym("year") %in% !!inp_y()
         ) %>%
-        select(!!sym("year"), !!sym("reporter_iso"),
-                 !!sym("commodity_code"), !!sym("section_code"),
-                 !!sym("trade_value_usd_imp"))
+        select(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
+               !!sym("section_code"), !!sym("commodity_code"),
+               !!sym("trade_value_usd_imp"))
 
-      if (any(inp_p() != "all")) {
+      if (any(inp_r() != "all")) {
         tar <- tar %>%
           filter(
-            # here we need the applied tariffs when the product gets to destination
-            !!sym("reporter_iso") %in% !!inp_p()
+            !!sym("reporter_iso") %in% !!inp_r()
           )
 
         trd <- trd %>%
           filter(
-            !!sym("partner_iso") %in% !!inp_r()
+            !!sym("reporter_iso") %in% !!inp_r()
+          )
+      }
+
+      if (any(inp_p() != "all")) {
+        tar <- tar %>%
+          filter(
+            !!sym("partner_iso") %in% !!inp_p()
+          )
+
+        trd <- trd %>%
+          filter(
+            !!sym("partner_iso") %in% !!inp_p()
           )
       }
 
       if (any(inp_s() %in% "vaccine")) {
+        tar <- tar %>%
+          left_join(
+            tbl(con, "vaccine_inputs")
+          ) %>%
+          mutate(
+            section_code = case_when(
+              !!sym("is_vaccine_input") == 1L ~ "vaccine",
+              TRUE ~ !!sym("section_code")
+            )
+          )
+
         trd <- trd %>%
           left_join(
             tbl(con, "vaccine_inputs")
@@ -357,28 +382,32 @@ app_server <- function(input, output, session) {
       }
 
       if (any(inp_s() != "all")) {
+        tar <- tar %>%
+          filter(!!sym("section_code") %in% !!inp_s())
+
         trd <- trd %>%
           filter(!!sym("section_code") %in% !!inp_s())
       }
 
       trd <- trd %>%
-        inner_join(tar, by = c("year", "reporter_iso", "commodity_code")) %>%
+        filter(
+          !!sym("trade_value_usd_imp") > 0
+        ) %>%
+        inner_join(tar, by = c("year", "reporter_iso", "partner_iso", "commodity_code")) %>%
         select(
           !!sym("year"),
           importer = !!sym("reporter_iso"),
+          exporter = !!sym("partner_iso"),
           !!sym("trade_value_usd_imp"),
-          !!sym("simple_average")
+          !!sym("tariff")
         ) %>%
-        filter(
-          !!sym("trade_value_usd_imp") > 0,
-          !!sym("simple_average") > 0
-        ) %>%
-        mutate(
-          avg_x_trade = !!sym("simple_average") * !!sym("trade_value_usd_imp")
-        ) %>%
+        mutate(tariff_x_trade = !!sym("tariff") * !!sym("trade_value_usd_imp")) %>%
         group_by(!!sym("year"), !!sym("importer")) %>%
         summarise(
-          mfn = (1 / 100) * sum(!!sym("avg_x_trade"), na.rm = T) /
+          # NOT IMPLEMENTED IN POSTGRESQL
+          # needs previous line tariff_x_trade
+          # tariff = weighted.mean(!!sym("tariff"), !!sym("trade_value_usd_imp"), na.rm = T)
+          tariff = (1 / 100) * sum(!!sym("tariff_x_trade"), na.rm = T) /
             sum(!!sym("trade_value_usd_imp"), na.rm = T)
         ) %>%
         ungroup() %>%
@@ -528,10 +557,10 @@ app_server <- function(input, output, session) {
             !!sym("importer") %in% !!inp_rc()  ~ as.integer(!!inp_rm()),
           TRUE ~ !!sym("rta")
         ),
-        mfn = case_when(
+        tariff = case_when(
           !!sym("year") >= !!inp_my() &
             !!sym("importer") %in% !!inp_mc() ~ as.integer(!!inp_mm()) / 100,
-          TRUE ~ !!sym("mfn")
+          TRUE ~ !!sym("tariff")
         )
       )
 

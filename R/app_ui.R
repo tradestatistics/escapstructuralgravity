@@ -312,7 +312,7 @@ app_ui <- function(request) {
                 textInput(
                   "fml",
                   "Model formula",
-                  "trade ~ log(dist) + log(gdp_exporter) + colony + comlang_off + contig + rta + mfn",
+                  "trade ~ log(dist) + log(gdp_exporter) + colony + comlang_off + contig + rta + tariff",
                   width = "100%",
                   placeholder = "Any valid R formula"
                 ) %>%
@@ -343,7 +343,7 @@ app_ui <- function(request) {
                                 <li>contig: The two countries are next to each other</li>
                                 <li>rta: The two countries are in a trade agreement</li>
                                 <li>smctry: The two countries were or are the same country</li>
-                                <li>mfn: Most Favoured Nation tariff (weighted average by exports)</li>
+                                <li>tariff: Weighted by imports mean for the minimum values between Most Favoured Nation (MFN) tariff and Preferential Rate at origin-destination-product level</li>
                               </ul>",
                                 "<b>References</b>",
                                 "Berge, L. and McDermott, G.<i><a href='https://cran.r-project.org/web/packages/fixest/vignettes/fixest_walkthrough.html#14_Other_estimation_functions'>Fast Fixed-Effects Estimation: Short introduction</a></i>. CRAN, 2021."),
@@ -452,11 +452,11 @@ app_ui <- function(request) {
                   )
               ),
 
-              ## MFN changes ----
+              ## Tariff changes ----
 
               col_12(
                 hr(),
-                h2("MFN modification")
+                h2("Tariff modification")
               ),
 
               col_4(
@@ -466,7 +466,7 @@ app_ui <- function(request) {
               col_4(
                 sliderInput(
                   "mm",
-                  "MFN rate modification (%)",
+                  "Tariff modification (%)",
                   min = 0,
                   max = 30,
                   value = 10,
@@ -474,11 +474,11 @@ app_ui <- function(request) {
                 ) %>%
                   helper(
                     type = "inline",
-                    title = "Alter MFNs situation for",
+                    title = "Alter tarriff situation for",
                     content = c("This corresponds to a 'what if' situation, for example, what would have happened (according
                               to the model) if the countries you've chosen increased/decreased their MFN avg rate starting in
-                              a certain year (i.e. what if Chile would have increased their MFN rates to an avg
-                              of 25% since 2020).",
+                              a certain year (i.e. what if Chile would have increased their weighted average MFN/PFR rate to
+                              25% since 2020).",
                                 "",
                                 "<b>References</b>",
                                 "Yotov, Y. V., Piermartini, R., and Larch, M. <i><a href='https://www.wto.org/english/res_e/publications_e/advancedguide2016_e.htm'>An Advanced Guide to Trade Policy Analysis: The Structural Gravity Model</a></i>. WTO iLibrary, 2016."),
@@ -503,11 +503,11 @@ app_ui <- function(request) {
                 ) %>%
                   helper(
                     type = "inline",
-                    title = "Alter MFNs situation for",
+                    title = "Alter tarriff situation for",
                     content = c("This corresponds to a 'what if' situation, for example, what would have happened (according
                               to the model) if the countries you've chosen increased/decreased their MFN avg rate starting in
-                              a certain year (i.e. what if Chile would have increased their MFN rates to an avg
-                              of 25% since 2020).",
+                              a certain year (i.e. what if Chile would have increased their weighted average MFN/PFR rate to
+                              25% since 2020).",
                                 "",
                                 "<b>References</b>",
                                 "Yotov, Y. V., Piermartini, R., and Larch, M. <i><a href='https://www.wto.org/english/res_e/publications_e/advancedguide2016_e.htm'>An Advanced Guide to Trade Policy Analysis: The Structural Gravity Model</a></i>. WTO iLibrary, 2016."),
