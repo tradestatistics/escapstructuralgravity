@@ -5,7 +5,7 @@
 #' @import shiny
 #' @import shinydashboard
 #' @import otsshinycommon
-#' @importFrom highcharter highchartOutput
+#' @importFrom plotly plotlyOutput
 #' @importFrom shinyhelper helper
 #' @importFrom shinyjs useShinyjs
 #' @importFrom waiter useWaitress
@@ -371,9 +371,17 @@ app_ui <- function(request) {
                 id = "model_col",
                 col_12(
                   htmlOutput("hdata_stl", container = tags$h2),
-                  tableOutput("hdata_dtl"),
+                ),
+                col_12(
+                  tableOutput("hdata_dtl")
+                ),
+                col_12(
                   htmlOutput("fit_stl", container = tags$h2),
-                  tableOutput("fit_tidy"),
+                ),
+                col_6(
+                  tableOutput("fit_tidy")
+                ),
+                col_6(
                   tableOutput("fit_glance")
                 )
               )
@@ -535,12 +543,12 @@ app_ui <- function(request) {
                 col_12(
                   htmlOutput("pred_stl", container = tags$h2)
                 ),
-                col_6(
-                  tableOutput("pred_trade_table")
-                )
                 # col_6(
-                #   highchartOutput("pred_trade_plot")
-                # )
+                #   tableOutput("pred_trade_table")
+                # ),
+                col_12(
+                  plotlyOutput("pred_trade_plot")
+                )
               )
             )
           ),
@@ -555,7 +563,8 @@ app_ui <- function(request) {
                 htmlOutput("dwn_txt", container = tags$p),
                 uiOutput("dwn_fmt"),
                 uiOutput("dwn_dtl"),
-                uiOutput("dwn_fit")
+                uiOutput("dwn_fit"),
+                uiOutput("dwn_sim")
               )
             )
           ),

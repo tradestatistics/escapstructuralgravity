@@ -10,9 +10,11 @@
 #'     ungroup
 #' @importFrom fixest feols feglm
 #' @importFrom glue glue
-#' @importFrom highcharter hchart hcaes hc_xAxis hc_yAxis hc_title renderHighchart
+#' @importFrom ggplot2 aes facet_wrap geom_col ggplot labs scale_fill_viridis_d
+#'     theme_minimal
 #' @importFrom janitor clean_names
 #' @importFrom lubridate day year
+#' @importFrom plotly ggplotly renderPlotly
 #' @importFrom rio import export
 #' @importFrom rlang sym
 #' @importFrom stats as.formula predict quasipoisson
@@ -42,7 +44,7 @@ app_server <- function(input, output, session) {
   inp_t <- reactive({ input$t }) # model type
   inp_z <- reactive({ input$z }) # drop zeros
   inp_d <- reactive({ input$d }) # adjust dollar
-  inp_c <- reactive({ input$c }) # cluste
+  inp_c <- reactive({ input$c }) # cluster
   inp_s <- reactive({
     s <- input$s
 
@@ -622,7 +624,7 @@ app_server <- function(input, output, session) {
     wt2$inc(1)
 
     d2 <- d2 %>%
-      mutate(variable = "Predicted trade (altered RTA and MFN)")
+      mutate(variable = "Predicted trade (altered RTA and/or Tariff)")
 
     d <- d %>% bind_rows(d2) %>%
       arrange(!!sym("year"), !!sym("importer"))
@@ -634,7 +636,7 @@ app_server <- function(input, output, session) {
     d$variable <- factor(d$variable,
       levels = c("Observed trade",
                  "Predicted trade",
-                 "Predicted trade (altered RTA and MFN)"))
+                 "Predicted trade (altered RTA and/or Tariff)"))
 
     wt2$inc(1)
 
@@ -651,29 +653,26 @@ app_server <- function(input, output, session) {
     ) %>%
     bindEvent(input$go2)
 
-  # pred_trade_plot <- reactive({
-  #   hchart(pred_trade_table() %>%
-  #            mutate(year = as.character(!!sym("year"))),
-  #          "column",
-  #          hcaes(x = "year", y = "value", group = c("importer", "variable")),
-  #          tooltip = list(
-  #            pointFormatter = custom_tooltip_short()
-  #          )) %>%
-  #     hc_xAxis(title = list(text = "Year")) %>%
-  #     hc_yAxis(title = list(text = "USD billion"),
-  #              labels = list(
-  #                formatter = JS("function() { return this.value / 1000000000 }")
-  #              )) %>%
-  #     hc_title(text = "ADD TITLE")
-  # }) %>%
-  #   bindCache(
-  #     inp_y(), inp_r(), inp_p(), inp_t(), inp_z(),
-  #     inp_d(), inp_c(), inp_s(),
-  #     fml(), lhs(), rhs(), raw_lhs(), raw_rhs(),
-  #     inp_rc(), inp_rm(), inp_ry(),
-  #     inp_mc(), inp_mm(), inp_my()
-  #   ) %>%
-  #   bindEvent(input$go2)
+  pred_trade_plot <- reactive({
+    print(pred_trade_table())
+    g <- ggplot(data = pred_trade_table() %>% mutate(year = as.character(!!sym("year")))) +
+      geom_col(aes(x = !!sym("year"), y = !!sym("value"), fill = !!sym("variable")), position = "dodge2") +
+      facet_wrap(~importer) +
+      labs(x = "Year", y = "USD billion",
+           title = "Observed vs simulated data") +
+      scale_fill_viridis_d() +
+      theme_minimal()
+
+    ggplotly(g)
+  }) %>%
+    bindCache(
+      inp_y(), inp_r(), inp_p(), inp_t(), inp_z(),
+      inp_d(), inp_c(), inp_s(),
+      fml(), lhs(), rhs(), raw_lhs(), raw_rhs(),
+      inp_rc(), inp_rm(), inp_ry(),
+      inp_mc(), inp_mm(), inp_my()
+    ) %>%
+    bindEvent(input$go2)
 
   # Cite ----
 
@@ -791,8 +790,8 @@ app_server <- function(input, output, session) {
   output$fit_glance <- renderTable({ glance(fit()) })
   output$fit_cat <- renderPrint({ fit() })
   output$pred_stl <- renderText({ pred_stl() })
-  output$pred_trade_table <- renderTable({ pred_trade_table() })
-  # output$pred_trade_plot <- renderHighchart({ pred_trade_plot() })
+  # output$pred_trade_table <- renderTable({ pred_trade_table() })
+  output$pred_trade_plot <- renderPlotly({ pred_trade_plot() })
 
   ## Download ----
 
@@ -832,6 +831,16 @@ app_server <- function(input, output, session) {
     contentType = "application/zip"
   )
 
+  output$dwn_sim_pre <- downloadHandler(
+    filename = function() {
+      glue("{ paste(unique(inp_rc(), imp_mc()), collapse = '_') }_{ min(unique(inp_ry(), inp_my()) }_{ max(unique(inp_ry(), inp_my()) }.rds")
+    },
+    content = function(filename) {
+      saveRDS(fit(), filename)
+    },
+    contentType = "application/zip"
+  )
+
   output$dwn_stl <- renderText({ dwn_stl() })
   output$dwn_txt <- renderText({ dwn_txt() })
   output$dwn_fmt <- renderUI({ dwn_fmt() })
@@ -844,6 +853,11 @@ app_server <- function(input, output, session) {
   output$dwn_fit <- renderUI({
     req(input$go)
     downloadButton('dwn_fit_pre', label = 'Fitted model')
+  })
+
+  output$dwn_sim <- renderUI({
+    req(input$go2)
+    downloadButton('dwn_sim_pre', label = 'Simulation results')
   })
 
   ## Cite ----

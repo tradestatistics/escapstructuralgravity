@@ -131,6 +131,18 @@
     },
     "7": {
       "@type": "SoftwareApplication",
+      "identifier": "ggplot2",
+      "name": "ggplot2",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=ggplot2"
+    },
+    "8": {
+      "@type": "SoftwareApplication",
       "identifier": "glue",
       "name": "glue",
       "version": ">= 1.6.2",
@@ -142,7 +154,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=glue"
     },
-    "8": {
+    "9": {
       "@type": "SoftwareApplication",
       "identifier": "golem",
       "name": "golem",
@@ -154,18 +166,6 @@
         "url": "https://cran.r-project.org"
       },
       "sameAs": "https://CRAN.R-project.org/package=golem"
-    },
-    "9": {
-      "@type": "SoftwareApplication",
-      "identifier": "highcharter",
-      "name": "highcharter",
-      "provider": {
-        "@id": "https://cran.r-project.org",
-        "@type": "Organization",
-        "name": "Comprehensive R Archive Network (CRAN)",
-        "url": "https://cran.r-project.org"
-      },
-      "sameAs": "https://CRAN.R-project.org/package=highcharter"
     },
     "10": {
       "@type": "SoftwareApplication",
@@ -214,6 +214,18 @@
     },
     "14": {
       "@type": "SoftwareApplication",
+      "identifier": "plotly",
+      "name": "plotly",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=plotly"
+    },
+    "15": {
+      "@type": "SoftwareApplication",
       "identifier": "rio",
       "name": "rio",
       "version": ">= 0.5.29",
@@ -225,7 +237,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=rio"
     },
-    "15": {
+    "16": {
       "@type": "SoftwareApplication",
       "identifier": "rlang",
       "name": "rlang",
@@ -238,7 +250,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=rlang"
     },
-    "16": {
+    "17": {
       "@type": "SoftwareApplication",
       "identifier": "shiny",
       "name": "shiny",
@@ -251,7 +263,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=shiny"
     },
-    "17": {
+    "18": {
       "@type": "SoftwareApplication",
       "identifier": "shinydashboard",
       "name": "shinydashboard",
@@ -264,7 +276,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=shinydashboard"
     },
-    "18": {
+    "19": {
       "@type": "SoftwareApplication",
       "identifier": "shinyhelper",
       "name": "shinyhelper",
@@ -277,7 +289,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=shinyhelper"
     },
-    "19": {
+    "20": {
       "@type": "SoftwareApplication",
       "identifier": "shinyjs",
       "name": "shinyjs",
@@ -290,12 +302,12 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=shinyjs"
     },
-    "20": {
+    "21": {
       "@type": "SoftwareApplication",
       "identifier": "stats",
       "name": "stats"
     },
-    "21": {
+    "22": {
       "@type": "SoftwareApplication",
       "identifier": "tidyr",
       "name": "tidyr",
@@ -308,17 +320,17 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=tidyr"
     },
-    "22": {
+    "23": {
       "@type": "SoftwareApplication",
       "identifier": "tools",
       "name": "tools"
     },
-    "23": {
+    "24": {
       "@type": "SoftwareApplication",
       "identifier": "utils",
       "name": "utils"
     },
-    "24": {
+    "25": {
       "@type": "SoftwareApplication",
       "identifier": "waiter",
       "name": "waiter",
@@ -333,5 +345,5 @@
     },
     "SystemRequirements": null
   },
-  "fileSize": "64.691KB"
+  "fileSize": "75.354KB"
 }
