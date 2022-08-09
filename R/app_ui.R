@@ -5,6 +5,7 @@
 #' @import shiny
 #' @import shinydashboard
 #' @import otsshinycommon
+#' @importFrom highcharter highchartOutput
 #' @importFrom shinyhelper helper
 #' @importFrom shinyjs useShinyjs
 #' @importFrom waiter useWaitress
@@ -519,12 +520,27 @@ app_ui <- function(request) {
               ),
 
               ## Simulation results ----
+              col_12(
+                align="center",
+                hr(),
+                actionButton(
+                  "go2",
+                  "Give me the results for this simulation",
+                  class = "btn-primary"
+                )
+              ),
+
               div(
                 id = "simulate_col",
                 col_12(
-                  htmlOutput("pred_stl", container = tags$h2),
+                  htmlOutput("pred_stl", container = tags$h2)
+                ),
+                col_6(
                   tableOutput("pred_trade_table")
                 )
+                # col_6(
+                #   highchartOutput("pred_trade_plot")
+                # )
               )
             )
           ),

@@ -5,10 +5,12 @@
 #' @import shiny
 #' @import otsshinycommon
 #' @importFrom broom glance tidy
-#' @importFrom dplyr arrange bind_rows case_when collect everything filter
-#'     group_by inner_join left_join mutate pull select summarise tbl ungroup
+#' @importFrom dplyr arrange bind_rows case_when collect everything ends_with
+#'     filter group_by inner_join left_join mutate pull select summarise tbl
+#'     ungroup
 #' @importFrom fixest feols feglm
 #' @importFrom glue glue
+#' @importFrom highcharter hchart hcaes hc_xAxis hc_yAxis hc_title renderHighchart
 #' @importFrom janitor clean_names
 #' @importFrom lubridate day year
 #' @importFrom rio import export
@@ -550,19 +552,54 @@ app_server <- function(input, output, session) {
     d2 <- df_dtl_2() %>%
       filter(
         !!sym("importer") %in% unique(!!inp_rc(), !!inp_mc())
-      ) %>%
+      )
+
+    print(d2)
+
+    if (length(inp_rc()) > 0) {
+      d2_1 <- d2 %>%
+        select(c("year", "trade", "importer", "exporter", "rta")) %>%
+        filter(
+          !!sym("importer") %in% !!inp_rc()
+        ) %>%
+        mutate(
+          rta = case_when(
+            !!sym("year") >= !!inp_ry() &
+              !!sym("importer") %in% !!inp_rc()  ~ as.integer(!!inp_rm()),
+            TRUE ~ !!sym("rta")
+          )
+        )
+    }
+
+    if (length(inp_mc()) > 0) {
+      d2_2 <- d2 %>%
+        select(c("year", "trade", "importer", "exporter", "tariff")) %>%
+        filter(
+          !!sym("importer") %in% !!inp_mc()
+        ) %>%
+        mutate(
+          tariff = case_when(
+            !!sym("year") >= !!inp_my() &
+              !!sym("importer") %in% !!inp_mc() ~ as.integer(!!inp_mm()) / 100,
+            TRUE ~ !!sym("tariff")
+          )
+        )
+    }
+
+    d2 <- d2 %>%
+      left_join(d2_1, by = c("year", "importer", "exporter", "trade")) %>%
+      left_join(d2_2, by = c("year", "importer", "exporter", "trade")) %>%
       mutate(
         rta = case_when(
-          !!sym("year") >= !!inp_ry() &
-            !!sym("importer") %in% !!inp_rc()  ~ as.integer(!!inp_rm()),
-          TRUE ~ !!sym("rta")
+          !is.na(!!sym("rta.y")) ~ !!sym("rta.y"),
+          TRUE ~ !!sym("rta.x")
         ),
         tariff = case_when(
-          !!sym("year") >= !!inp_my() &
-            !!sym("importer") %in% !!inp_mc() ~ as.integer(!!inp_mm()) / 100,
-          TRUE ~ !!sym("tariff")
+          !is.na(!!sym("tariff.y")) ~ !!sym("tariff.y"),
+          TRUE ~ !!sym("tariff.x")
         )
-      )
+      ) %>%
+      select(-ends_with(".x"), -ends_with(".y"))
 
     wt2$inc(1)
 
@@ -603,7 +640,6 @@ app_server <- function(input, output, session) {
 
     wt2$close()
 
-    print(d)
     return(d)
   }) %>%
     bindCache(
@@ -613,7 +649,31 @@ app_server <- function(input, output, session) {
       inp_rc(), inp_rm(), inp_ry(),
       inp_mc(), inp_mm(), inp_my()
     ) %>%
-    bindEvent(input$go)
+    bindEvent(input$go2)
+
+  # pred_trade_plot <- reactive({
+  #   hchart(pred_trade_table() %>%
+  #            mutate(year = as.character(!!sym("year"))),
+  #          "column",
+  #          hcaes(x = "year", y = "value", group = c("importer", "variable")),
+  #          tooltip = list(
+  #            pointFormatter = custom_tooltip_short()
+  #          )) %>%
+  #     hc_xAxis(title = list(text = "Year")) %>%
+  #     hc_yAxis(title = list(text = "USD billion"),
+  #              labels = list(
+  #                formatter = JS("function() { return this.value / 1000000000 }")
+  #              )) %>%
+  #     hc_title(text = "ADD TITLE")
+  # }) %>%
+  #   bindCache(
+  #     inp_y(), inp_r(), inp_p(), inp_t(), inp_z(),
+  #     inp_d(), inp_c(), inp_s(),
+  #     fml(), lhs(), rhs(), raw_lhs(), raw_rhs(),
+  #     inp_rc(), inp_rm(), inp_ry(),
+  #     inp_mc(), inp_mm(), inp_my()
+  #   ) %>%
+  #   bindEvent(input$go2)
 
   # Cite ----
 
@@ -722,7 +782,7 @@ app_server <- function(input, output, session) {
 
   hdata_stl <- eventReactive(input$go, { "Data preview" })
   fit_stl <- eventReactive(input$go, { "Model summary" })
-  pred_stl <- eventReactive(input$go, { "Model simulation" })
+  pred_stl <- eventReactive(input$go2, { "Model simulation" })
 
   output$hdata_stl <- renderText({ hdata_stl() })
   output$hdata_dtl <- renderTable({ head(df_dtl_2()) })
@@ -732,6 +792,7 @@ app_server <- function(input, output, session) {
   output$fit_cat <- renderPrint({ fit() })
   output$pred_stl <- renderText({ pred_stl() })
   output$pred_trade_table <- renderTable({ pred_trade_table() })
+  # output$pred_trade_plot <- renderHighchart({ pred_trade_plot() })
 
   ## Download ----
 
