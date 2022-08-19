@@ -836,10 +836,10 @@ app_server <- function(input, output, session) {
 
   output$dwn_sim_pre <- downloadHandler(
     filename = function() {
-      glue("{ paste(unique(inp_rc(), imp_mc()), collapse = '_') }_{ min(unique(inp_ry(), inp_my()) }_{ max(unique(inp_ry(), inp_my()) }.rds")
+      glue("{ paste(unique(inp_rc(), imp_mc()), collapse = '_') }_{ min(unique(inp_ry(), inp_my()) }_{ max(unique(inp_ry(), inp_my()) }.{ inp_fmt() }")
     },
     content = function(filename) {
-      saveRDS(pred_trade_table(), filename)
+      export(pred_trade_table(), filename)
     },
     contentType = "application/zip"
   )
