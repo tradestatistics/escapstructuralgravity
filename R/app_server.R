@@ -150,7 +150,7 @@ app_server <- function(input, output, session) {
     d <- d %>%
       filter(
         !!sym("year") %in% !!inp_y() &
-        !!sym("reporter_iso") != !!sym("partner_iso")
+          !!sym("reporter_iso") != !!sym("partner_iso")
       )
 
     if (any(inp_r() != "all")) {
@@ -190,7 +190,7 @@ app_server <- function(input, output, session) {
 
       d <- d %>%
         filter(
-            !!sym("section_code") %in% s2 |
+          !!sym("section_code") %in% s2 |
             substr(!!sym("commodity_code"), 1, 4) %in% s4 |
             !!sym("commodity_code") %in% s6
         )
@@ -405,7 +405,10 @@ app_server <- function(input, output, session) {
           !!sym("trade_value_usd_imp"),
           !!sym("tariff")
         ) %>%
-        mutate(tariff_x_trade = !!sym("tariff") * !!sym("trade_value_usd_imp")) %>%
+        mutate(
+          tariff = ifelse(is.na(!!sym("tariff")), 0, !!sym("tariff")),
+          tariff_x_trade = !!sym("tariff") * !!sym("trade_value_usd_imp")
+        ) %>%
         group_by(!!sym("year"), !!sym("importer")) %>%
         summarise(
           # NOT IMPLEMENTED IN POSTGRESQL
@@ -634,9 +637,9 @@ app_server <- function(input, output, session) {
     wt2$inc(1)
 
     d$variable <- factor(d$variable,
-      levels = c("Observed trade",
-                 "Predicted trade",
-                 "Predicted trade (altered RTA and/or Tariff)"))
+                         levels = c("Observed trade",
+                                    "Predicted trade",
+                                    "Predicted trade (altered RTA and/or Tariff)"))
 
     wt2$inc(1)
 
