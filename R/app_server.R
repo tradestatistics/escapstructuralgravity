@@ -657,7 +657,7 @@ app_server <- function(input, output, session) {
     bindEvent(input$go2)
 
   pred_trade_plot <- reactive({
-    print(pred_trade_table())
+    # print(pred_trade_table())
     g <- ggplot(data = pred_trade_table() %>% mutate(year = as.character(!!sym("year")))) +
       geom_col(aes(x = !!sym("year"), y = !!sym("value"), fill = !!sym("variable")), position = "dodge2") +
       facet_wrap(~importer) +
@@ -839,7 +839,7 @@ app_server <- function(input, output, session) {
       glue("{ paste(unique(inp_rc(), imp_mc()), collapse = '_') }_{ min(unique(inp_ry(), inp_my()) }_{ max(unique(inp_ry(), inp_my()) }.rds")
     },
     content = function(filename) {
-      saveRDS(fit(), filename)
+      saveRDS(pred_trade_table(), filename)
     },
     contentType = "application/zip"
   )
