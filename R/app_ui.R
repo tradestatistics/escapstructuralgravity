@@ -64,7 +64,20 @@ app_ui <- function(request) {
             trade analysis. The gravity model of trade is a structural model
             with solid theoretical foundations. This property makes the gravity
             framework particularly appropriate for counterfactual analysis,
-            such as quantifying the effects of trade policy.")
+            such as quantifying the effects of trade policy."),
+            p(" "),
+            h1("How to use this tool"),
+            HTML("<p>Go to the <i>Model</i> section, filter the years, reporters and
+              importers. Select the model type and proceed to fit the model.
+              Each option has a help button next to it with the relevant details.</p>"),
+            HTML("<p>Proceed to the <i>Simulate</i> section, where you can generate
+              a counterfactual scenario by altering the actual RTAs and Tariffs
+              situation. You can skip this section if you want to.</p>"),
+            HTML("<p>Go to the <i>Download</i> section, which is displayed after
+              you are ready with the <i>Model</i> section, where you can download
+              the dataset used for the estimation and the fitted model.</p>"),
+            HTML("<p>You can find the citation in HTML and BibTeX format in the
+              <i>Cite</i> section.</p>")
           ),
 
           # Model ----
