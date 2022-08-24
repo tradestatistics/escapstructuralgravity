@@ -150,7 +150,7 @@ app_server <- function(input, output, session) {
     d <- d %>%
       filter(
         !!sym("year") %in% !!inp_y() &
-        !!sym("reporter_iso") != !!sym("partner_iso")
+          !!sym("reporter_iso") != !!sym("partner_iso")
       )
 
     if (any(inp_r() != "all")) {
@@ -190,7 +190,7 @@ app_server <- function(input, output, session) {
 
       d <- d %>%
         filter(
-            !!sym("section_code") %in% s2 |
+          !!sym("section_code") %in% s2 |
             substr(!!sym("commodity_code"), 1, 4) %in% s4 |
             !!sym("commodity_code") %in% s6
         )
@@ -405,7 +405,10 @@ app_server <- function(input, output, session) {
           !!sym("trade_value_usd_imp"),
           !!sym("tariff")
         ) %>%
-        mutate(tariff_x_trade = !!sym("tariff") * !!sym("trade_value_usd_imp")) %>%
+        mutate(
+          tariff = ifelse(is.na(!!sym("tariff")), 0, !!sym("tariff")),
+          tariff_x_trade = !!sym("tariff") * !!sym("trade_value_usd_imp")
+        ) %>%
         group_by(!!sym("year"), !!sym("importer")) %>%
         summarise(
           # NOT IMPLEMENTED IN POSTGRESQL
@@ -634,9 +637,9 @@ app_server <- function(input, output, session) {
     wt2$inc(1)
 
     d$variable <- factor(d$variable,
-      levels = c("Observed trade",
-                 "Predicted trade",
-                 "Predicted trade (altered RTA and/or Tariff)"))
+                         levels = c("Observed trade",
+                                    "Predicted trade",
+                                    "Predicted trade (altered RTA and/or Tariff)"))
 
     wt2$inc(1)
 
@@ -654,7 +657,7 @@ app_server <- function(input, output, session) {
     bindEvent(input$go2)
 
   pred_trade_plot <- reactive({
-    print(pred_trade_table())
+    # print(pred_trade_table())
     g <- ggplot(data = pred_trade_table() %>% mutate(year = as.character(!!sym("year")))) +
       geom_col(aes(x = !!sym("year"), y = !!sym("value"), fill = !!sym("variable")), position = "dodge2") +
       facet_wrap(~importer) +
@@ -833,10 +836,10 @@ app_server <- function(input, output, session) {
 
   output$dwn_sim_pre <- downloadHandler(
     filename = function() {
-      glue("{ paste(unique(inp_rc(), imp_mc()), collapse = '_') }_{ min(unique(inp_ry(), inp_my()) }_{ max(unique(inp_ry(), inp_my()) }.rds")
+      glue("simulation.{ inp_fmt() }")
     },
     content = function(filename) {
-      saveRDS(fit(), filename)
+      export(pred_trade_table(), filename)
     },
     contentType = "application/zip"
   )
@@ -898,7 +901,8 @@ app_server <- function(input, output, session) {
     # strip shiny related URL parameters
     rvtl(input)
     setBookmarkExclude(c(
-      "shinyhelper-modal_params", "own", "fmt"
+      "shinyhelper-modal_params", "own", "fmt", "sidebarCollapsed", "sidebarItemExpanded",
+      "i", ".clientValue-default-plotlyCrosstalkOpts", "plotly_hover-A", "plotly_afterplot-A"
     ))
     session$doBookmark()
   })
