@@ -902,7 +902,8 @@ app_server <- function(input, output, session) {
     rvtl(input)
     setBookmarkExclude(c(
       "shinyhelper-modal_params", "own", "fmt", "sidebarCollapsed", "sidebarItemExpanded",
-      "i", ".clientValue-default-plotlyCrosstalkOpts", "plotly_hover-A", "plotly_afterplot-A"
+      "i", ".clientValue-default-plotlyCrosstalkOpts", "plotly_hover-A", "plotly_afterplot-A",
+      "go", "go2"
     ))
     session$doBookmark()
   })
