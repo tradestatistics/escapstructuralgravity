@@ -77,7 +77,21 @@ app_ui <- function(request) {
               you are ready with the <i>Model</i> section, where you can download
               the dataset used for the estimation and the fitted model.</p>"),
             HTML("<p>You can find the citation in HTML and BibTeX format in the
-              <i>Cite</i> section.</p>")
+              <i>Cite</i> section.</p>"),
+            h1("Technical details"),
+            HTML("<p>This tool can estimate the traditional gravity model,
+                 by including GDPs, colonial links, common language, contiguity,
+                 trade agreements and tariffs. But the tool also allows to
+                 estimate structural gravity, by easily allowing to include of
+                 importer and exporter fixed effects, even allowing to switch
+                 between OLS and PPML regression.</p>"),
+            HTML("<p>As an example, say we want to explore the effect of
+                 distance, contiguity and tariffs on imports for NAFTA
+                 members in the years 2012, 2016 and 2020. Then we could estimate
+                 the model
+                 <i>trade ~ log(dist) + contig + tariff</i> and set the tool to
+                 use PPML, as in the next image</p>"),
+            HTML("<img src='https://shiny.tradestatistics.io/images/ppml_demo.png' alt='PPML demo'/>")
           ),
 
           # Model ----
