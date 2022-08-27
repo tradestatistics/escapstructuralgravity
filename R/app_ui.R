@@ -570,13 +570,12 @@ app_ui <- function(request) {
             tabName = "acknowledgement",
             h1("Acknowledgement"),
             p("The United Nations Economic and Social Commission for Asia and
-            the Pacific (ESCAP), in collaboration with the United Nations
-            Conference on Trade and Development (UNCTAD) and other four UN
-            regional commissions, are implementing a Development Account Project
-            on Transport and Trade Connectivity in the Age of Pandemics."),
+            the Pacific (ESCAP), and other UN regional commissions, are
+            implementing a Development Account Project on Transport and Trade
+            Connectivity in the Age of Pandemics."),
             p("This project responds to a call for action to tackle the many
             social and economic dimensions of the COVID-19 crisis. In
-            particular, this tools provides structural gravity modelling tools
+            particular, this tool provides structural gravity modelling tools
             to estimate the impact of trade policies, such as tariff reductions
             or trade agreement provisions."),
             p("The structural gravity model is the workhorse of international
@@ -600,17 +599,28 @@ app_ui <- function(request) {
             h1("Technical details"),
             HTML("<p>This tool can estimate the traditional gravity model,
                  by including GDPs, colonial links, common language, contiguity,
-                 trade agreements and tariffs. But the tool also allows to
-                 estimate structural gravity, by easily allowing to include of
-                 importer and exporter fixed effects, even allowing to switch
-                 between OLS and PPML regression.</p>"),
+                 trade agreements and tariffs. The tool also allows to
+                 estimate basic gravity and also structural gravity, which
+                 unlike the former, includes importer and exporter fixed effects.
+                 In addition, we can switch between OLS and PPML regression.</p>"),
             HTML("<p>As an example, say we want to explore the effect of
                  distance, contiguity and tariffs on imports for NAFTA
                  members in the years 2012, 2016 and 2020. Then we could estimate
                  the model
-                 <i>trade ~ log(dist) + contig + tariff</i> and set the tool to
-                 use PPML, as in the next image</p>"),
-            HTML("<img src='https://shiny.tradestatistics.io/images/ppml_demo.png' alt='PPML demo'/>")
+                 <i>trade ~ log(dist) + contig + rta</i> and set the tool to
+                 use PPML with clustered standard errors (i.e., by country pairs),
+                 as in the next animation. You can see more details by
+                 clicking '?' in the actual sliders and dropdowns.</p>"),
+            HTML("<video controls>
+                 <source src='https://shiny.tradestatistics.io/images/ppml_demo.mp4' type='video/mp4'>
+                 Your browser does not support the video tag.
+                 </video>"),
+            h1("References"),
+            p("The main references for this work were the next materials."),
+            HTML("<p>Yotov, Y. V., Piermartini, R., and Larch, M. <i><a href='https://www.wto.org/english/res_e/publications_e/advancedguide2016_e.htm'>An Advanced Guide to Trade Policy Analysis: The Structural Gravity Model</a></i>. WTO iLibrary, 2016.</p>"),
+            HTML("<p>Vargas, M. <i><a href='https://r.tiid.org/R_structural_gravity/'>Solutions Manual for An Advanced Guide to Trade Policy Analysis in R</a></i>. UN ESCAP, 2020.</p>"),
+            HTML("<p>UN ESCAP. <i><a href='https://r.tiid.org/'>ESCAP Online Training on Using R for Trade Analysis</a></i>. UN ESCAP, 2020.</p>"),
+            p("Note: You can get a certificate if you finish the ESCAP online training.")
           )
         ),
 
