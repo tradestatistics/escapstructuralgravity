@@ -1,13 +1,13 @@
 {
   "@context": "https://doi.org/10.5063/schema/codemeta-2.0",
   "@type": "SoftwareSourceCode",
-  "identifier": "ttcstructuralgravity",
+  "identifier": "escapstructuralgravity",
   "description": "Wrappers around gravity models for interactive model building. This is meant as a production grade Shiny app and not as end user app.",
-  "name": "ttcstructuralgravity: Open Trade Statistics Model App",
+  "name": "escapstructuralgravity: Open Trade Statistics Model App",
   "codeRepository": "https://github.com/tradestatistics/visualization-with-shiny",
   "issueTracker": "\n    https://github.com/tradestatistics/visualization-with-shiny/issues",
   "license": "Apache License 2",
-  "version": "2022.8.8",
+  "version": "2022.8.24",
   "programmingLanguage": {
     "@type": "ComputerLanguage",
     "name": "R",
@@ -345,5 +345,7 @@
     },
     "SystemRequirements": null
   },
-  "fileSize": "75.354KB"
+  "fileSize": "67.271KB",
+  "releaseNotes": "https://github.com/tradestatistics/visualization-with-shiny/blob/master/NEWS.md",
+  "readme": "https://github.com/tradestatistics/visualization-with-shiny/blob/master/README.md"
 }

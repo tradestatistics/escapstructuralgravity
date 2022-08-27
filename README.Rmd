@@ -13,12 +13,12 @@ knitr::opts_chunk$set(
 )
 ```
 
-# ttcstructuralgravity
+# escapstructuralgravity
 
 <!-- badges: start -->
 <!-- badges: end -->
 
-The goal of ttcstructuralgravity is to simulate the effect of policy variables 
+The goal of escapstructuralgravity is to simulate the effect of policy variables 
 over international trade flows for different countries.
 
 The financial support under the UN Development Account project "Transport and 
@@ -27,9 +27,9 @@ collaborative UN solutions" is gratefully acknowledged.
 
 ## Installation
 
-You can install the development version of ttcstructuralgravity from [GitHub](https://github.com/) with:
+You can install the development version of escapstructuralgravity from [GitHub](https://github.com/) with:
 
 ``` r
 # install.packages("remotes")
-remotes::install_github("pachadotdev/ttcstructuralgravity")
+remotes::install_github("pachadotdev/escapstructuralgravity")
 ```

@@ -100,35 +100,32 @@ app_server <- function(input, output, session) {
 
   ## 2. define model formula ----
 
-  lhs <- eventReactive(input$go, {
-    lhs <- gsub("\\s+", "", gsub("~.*", "", inp_fml()))
-    return(lhs)
-  })
-
-  rhs <- eventReactive(input$go, {
-    rhs <- unlist(strsplit(gsub("\\s+", "", gsub(".*~", "", inp_fml())), "\\+"))
-    rhs <- sort(rhs[rhs != "+"])
-    return(rhs)
-  })
-
-  raw_lhs <- reactive({
-    x <- unlist(regmatches(lhs(), gregexpr("(?<=\\().*?(?=\\))", lhs(), perl = T)))
-    x <- x[x != ""]
-    return(x)
-  })
-
-  raw_rhs <- reactive({
-    x <- unlist(regmatches(rhs(), gregexpr("(?<=\\().*?(?=\\))", rhs(), perl = T)))
-    x <- x[x != ""]
-    return(x)
-  })
+  # lhs <- eventReactive(input$go, {
+  #   lhs <- gsub("\\s+", "", gsub("~.*", "", inp_fml()))
+  #   return(lhs)
+  # })
+  #
+  # rhs <- eventReactive(input$go, {
+  #   rhs <- unlist(strsplit(gsub("\\s+", "", gsub(".*~", "", inp_fml())), "\\+"))
+  #   rhs <- sort(rhs[rhs != "+"])
+  #   return(rhs)
+  # })
+  #
+  # raw_lhs <- reactive({
+  #   x <- unlist(regmatches(lhs(), gregexpr("(?<=\\().*?(?=\\))", lhs(), perl = T)))
+  #   x <- x[x != ""]
+  #   return(x)
+  # })
+  #
+  # raw_rhs <- reactive({
+  #   x <- unlist(regmatches(rhs(), gregexpr("(?<=\\().*?(?=\\))", rhs(), perl = T)))
+  #   x <- x[x != ""]
+  #   return(x)
+  # })
 
   fml <- eventReactive(input$go, {
-    fml <- paste0(lhs(), " ~ ", paste(rhs(), collapse = " + "))
-    if (inp_t() == "olsfe") {
-      fml <- paste(fml, "| reporter_yr + partner_yr")
-    }
-    return(fml)
+    # fml <- paste0(lhs(), " ~ ", paste(rhs(), collapse = " + "))
+    return(inp_fml())
   })
 
   ## 3. read from SQL ----
@@ -239,7 +236,7 @@ app_server <- function(input, output, session) {
 
     ### 3.3. add RTA data ----
 
-    if (any(rhs() %in% "rta")) {
+    if (any(grepl("rta", fml()))) {
       d <- d %>%
         mutate(
           country1 = pmin(!!sym("importer"), !!sym("exporter")),
@@ -264,13 +261,11 @@ app_server <- function(input, output, session) {
 
     ### 3.4. create fixed effects ----
 
-    if (inp_t() == "olsfe") {
-      d <- d %>%
-        mutate(
-          importer_yr = paste0(!!sym("importer"), !!sym("year")),
-          exporter_yr = paste0(!!sym("exporter"), !!sym("year"))
-        )
-    }
+    d <- d %>%
+      mutate(
+        importer_year = paste0(!!sym("importer"), !!sym("year")),
+        exporter_year = paste0(!!sym("exporter"), !!sym("year"))
+      )
 
     wt$inc(.5)
 
@@ -285,8 +280,7 @@ app_server <- function(input, output, session) {
 
     ### 3.6. add GDP / GDP percap ----
 
-    if (any(c(raw_rhs(), rhs()) %in%
-            c("gdp_importer", "gdp_percap_importer", "gdp_exporter", "gdp_percap_exporter"))) {
+    if (any(grepl("gdp", fml()))) {
       d <- d %>%
         inner_join(
           tbl(con, "gdp") %>%
@@ -320,7 +314,7 @@ app_server <- function(input, output, session) {
 
     # here we need the applied tariffs when the product gets to destination
 
-    if (any(c(raw_rhs(), rhs()) %in% "tariff")) {
+    if (any(grepl("tariff", fml()))) {
       tar <- tbl(con, "tariffs") %>%
         filter(
           !!sym("year") %in% !!inp_y()
@@ -432,22 +426,25 @@ app_server <- function(input, output, session) {
 
     gc()
 
-    return(
-      # TODO: improve this
-      # it's not elegant, but works well with polynomials, logs, etc in formulas
-      d[,
-        colnames(d) %in%
-          c("year", "importer", "exporter",
-            lhs(), rhs(), raw_lhs(), raw_rhs(),
-            "remoteness_exp", "remoteness_imp", "imp_exp"
-          )
-      ]
-    )
+    # return(
+    #   # TODO: improve this
+    #   # it's not elegant, but works well with polynomials, logs, etc in formulas
+    #   d[,
+    #     colnames(d) %in%
+    #       c("year", "importer", "exporter", "importer_year", "exporter_year",
+    #         lhs(), rhs(), raw_lhs(), raw_rhs(),
+    #         "imp_exp"
+    #       )
+    #   ]
+    # )
+
+    return(d)
   }) %>%
     bindCache(
       inp_y(), inp_r(), inp_p(), inp_t(), inp_z(),
       inp_d(), inp_c(), inp_s(),
-      fml(), lhs(), rhs(), raw_lhs(), raw_rhs()
+      fml()
+      # lhs(), rhs(), raw_lhs(), raw_rhs()
     ) %>%
     bindEvent(input$go)
 
@@ -472,7 +469,7 @@ app_server <- function(input, output, session) {
 
     fml <- as.formula(fml())
 
-    if (any(inp_t() %in% c("ols", "olsfe"))) {
+    if (any(inp_t() == "ols")) {
       if (inp_c() == "yes") {
         m <- tryCatch(
           feols(fml, df_dtl_2(), cluster = ~imp_exp),
@@ -650,7 +647,8 @@ app_server <- function(input, output, session) {
     bindCache(
       inp_y(), inp_r(), inp_p(), inp_t(), inp_z(),
       inp_d(), inp_c(), inp_s(),
-      fml(), lhs(), rhs(), raw_lhs(), raw_rhs(),
+      fml(),
+      # lhs(), rhs(), raw_lhs(), raw_rhs(),
       inp_rc(), inp_rm(), inp_ry(),
       inp_mc(), inp_mm(), inp_my()
     ) %>%
@@ -671,7 +669,8 @@ app_server <- function(input, output, session) {
     bindCache(
       inp_y(), inp_r(), inp_p(), inp_t(), inp_z(),
       inp_d(), inp_c(), inp_s(),
-      fml(), lhs(), rhs(), raw_lhs(), raw_rhs(),
+      fml(),
+      # lhs(), rhs(), raw_lhs(), raw_rhs(),
       inp_rc(), inp_rm(), inp_ry(),
       inp_mc(), inp_mm(), inp_my()
     ) %>%
@@ -683,17 +682,17 @@ app_server <- function(input, output, session) {
 
   cite_text <- reactive({
     glue(
-      "United Nations ESCAP. \"UN TRANSPORT AND TRADE CONNECTIVITY STRUCTURAL GRAVITY DASHBOARD\". <i>United Nations</i>.
+      "ESCAP. \"ESCAP STRUCTURAL GRAVITY DASHBOARD\". <i>ESCAP</i>.
         Accessed {months(Sys.Date()) } { day(Sys.Date()) }, { year(Sys.Date()) }. { site_url }/."
     )
   })
 
   cite_bibtex <- reactive({
-    glue("@misc{{unescap_ttc_structural_gravity_{year(Sys.Date())},
-      title = {{UN Transport and Trade Connectivity Structural Gravity Dashboard}},
+    glue("@misc{{escap_structural_gravity_{year(Sys.Date())},
+      title = {{ESCAP Structural Gravity Dashboard}},
       url = {{{site_url}}},
-      author = {{UN ESCAP}},
-      publisher = {{UN ESCAP}},
+      author = {{ESCAP}},
+      publisher = {{ESCAP}},
       year = {{2022}},
       month = {{Jul}},
       note = {{Accessed: { months(Sys.Date()) } { day(Sys.Date()) }, { year(Sys.Date()) }}}}}"
@@ -891,7 +890,10 @@ app_server <- function(input, output, session) {
   # Footer ----
 
   output$site_footer <- renderText({
-    glue("<center><i>UN ESCAP {year(Sys.Date())}.</i></center>")
+    glue("<center><i>ESCAP {year(Sys.Date())}.</i> Creative Commons BY 4.0 International License.
+         The information displayed here is based on
+         <a href='https://comtrade.un.org/'>UN Comtrade</a> datasets. These figures do not
+         include services or foreign direct investment.</center>")
   })
 
   # Bookmarking ----

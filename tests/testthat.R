@@ -7,6 +7,6 @@
 # * https://testthat.r-lib.org/reference/test_package.html#special-files
 
 library(testthat)
-library(ttcstructuralgravity)
+library(escapstructuralgravity)
 
-test_check("ttcstructuralgravity")
+test_check("escapstructuralgravity")

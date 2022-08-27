@@ -4,4 +4,4 @@
 
 pkgload::load_all(export_all = FALSE,helpers = FALSE,attach_testthat = FALSE)
 options("golem.app.prod" = TRUE)
-ttcstructuralgravity::run_app() # add parameters here (if any)
+escapstructuralgravity::run_app() # add parameters here (if any)

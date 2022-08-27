@@ -19,81 +19,28 @@ app_ui <- function(request) {
       skin = styles$skin_color,
       theme = styles$css_files,
 
-      dashboardHeader(title = "UN-TTC-SGD"),
+      dashboardHeader(title = "ESCAP SGD"),
 
       dashboardSidebar(
         useShinyjs(),
         useWaitress(),
         sidebarMenu(
-          menuItem("Welcome", tabName = "welcome"),
           menuItem("Model", tabName = "model"),
           menuItem("Simulate", tabName = "simulate"),
           menuItem("Download", tabName = "download"),
-          menuItem("Cite", tabName = "cite")
+          menuItem("Cite", tabName = "cite"),
+          menuItem("Acknowledgement", tabName = "acknowledgement")
         )
       ),
 
       dashboardBody(
         fluidRow(
           col_12(
-            HTML("<h1>UN Transport and Trade Connectivity Structural Gravity Dashboard</h1>"),
-            HTML("The information displayed here is based on
-            <a href='https://comtrade.un.org/'>UN Comtrade</a> datasets. This tool is released
-            under Creative Commons BY 4.0 International License. These figures do not
-            include services or foreign direct investment.</p>")
+            HTML("<h1>ESCAP Structural Gravity Dashboard</h1>")
           )
         ),
 
         tabItems(
-          # Welcome ----
-
-          tabItem(
-            tabName = "welcome",
-            h1("Welcome"),
-            p("The United Nations Economic and Social Commission for Asia and
-            the Pacific (ESCAP), in collaboration with the United Nations
-            Conference on Trade and Development (UNCTAD) and other four UN
-            regional commissions, are implementing a Development Account Project
-            on Transport and Trade Connectivity in the Age of Pandemics."),
-            p("This project responds to a call for action to tackle the many
-            social and economic dimensions of the COVID-19 crisis. In
-            particular, this tools provides structural gravity modelling tools
-            to estimate the impact of trade policies, such as tariff reductions
-            or trade agreement provisions."),
-            p("The structural gravity model is the workhorse of international
-            trade analysis. The gravity model of trade is a structural model
-            with solid theoretical foundations. This property makes the gravity
-            framework particularly appropriate for counterfactual analysis,
-            such as quantifying the effects of trade policy."),
-            p(" "),
-            h1("How to use this tool"),
-            HTML("<p>Go to the <i>Model</i> section, filter the years, reporters and
-              importers. Select the model type and proceed to fit the model.
-              Each option has a help button next to it with the relevant details.</p>"),
-            HTML("<p>Proceed to the <i>Simulate</i> section, where you can generate
-              a counterfactual scenario by altering the actual RTAs and Tariffs
-              situation. You can skip this section if you want to.</p>"),
-            HTML("<p>Go to the <i>Download</i> section, which is displayed after
-              you are ready with the <i>Model</i> section, where you can download
-              the dataset used for the estimation and the fitted model.</p>"),
-            HTML("<p>You can find the citation in HTML and BibTeX format in the
-              <i>Cite</i> section.</p>"),
-            h1("Technical details"),
-            HTML("<p>This tool can estimate the traditional gravity model,
-                 by including GDPs, colonial links, common language, contiguity,
-                 trade agreements and tariffs. But the tool also allows to
-                 estimate structural gravity, by easily allowing to include of
-                 importer and exporter fixed effects, even allowing to switch
-                 between OLS and PPML regression.</p>"),
-            HTML("<p>As an example, say we want to explore the effect of
-                 distance, contiguity and tariffs on imports for NAFTA
-                 members in the years 2012, 2016 and 2020. Then we could estimate
-                 the model
-                 <i>trade ~ log(dist) + contig + tariff</i> and set the tool to
-                 use PPML, as in the next image</p>"),
-            HTML("<img src='https://shiny.tradestatistics.io/images/ppml_demo.png' alt='PPML demo'/>")
-          ),
-
           # Model ----
 
           tabItem(
@@ -347,7 +294,8 @@ app_ui <- function(request) {
                   helper(
                     type = "inline",
                     title = "Model formula",
-                    content = c("Write a valid formula in the context of the fixest package. The fixed effects (if any) are added automatically, so don't write those.",
+                    content = c("Write a valid formula in the context of the fixest package. A regression with importer and exporter fixed
+                                effects would be like <i>trade ~ log(dist) + contig | importer + exporter</i>.",
                                 "",
                                 "<h4>Gravity variables in our database</h4>",
                                 "<b>Exports and Imports (LHS)</b>
@@ -372,6 +320,13 @@ app_ui <- function(request) {
                                 <li>rta: The two countries are in a trade agreement</li>
                                 <li>smctry: The two countries were or are the same country</li>
                                 <li>tariff: Weighted by imports mean for the minimum values between Most Favoured Nation (MFN) tariff and Preferential Rate at origin-destination-product level</li>
+                              </ul>",
+                                "<b>Fixed effects for modelling</b>
+                              <ul>
+                                <li>exporter: ISO-3 codes for the exporters.</li>
+                                <li>importer: ISO-3 codes for the importers.</li>
+                                <li>exporter_year: ISO-3 codes for the exporters and year (i.e., chl2002, ..., chl2020).</li>
+                                <li>importer_year: ISO-3 codes for the exporters and year (i.e., chn2002, ..., chn2020).</li>
                               </ul>",
                                 "<b>References</b>",
                                 "Berge, L. and McDermott, G.<i><a href='https://cran.r-project.org/web/packages/fixest/vignettes/fixest_walkthrough.html#14_Other_estimation_functions'>Fast Fixed-Effects Estimation: Short introduction</a></i>. CRAN, 2021."),
@@ -607,6 +562,55 @@ app_ui <- function(request) {
                 uiOutput("citation_bibtex")
               )
             )
+          ),
+
+          # Acknowledgement ----
+
+          tabItem(
+            tabName = "acknowledgement",
+            h1("Acknowledgement"),
+            p("The United Nations Economic and Social Commission for Asia and
+            the Pacific (ESCAP), in collaboration with the United Nations
+            Conference on Trade and Development (UNCTAD) and other four UN
+            regional commissions, are implementing a Development Account Project
+            on Transport and Trade Connectivity in the Age of Pandemics."),
+            p("This project responds to a call for action to tackle the many
+            social and economic dimensions of the COVID-19 crisis. In
+            particular, this tools provides structural gravity modelling tools
+            to estimate the impact of trade policies, such as tariff reductions
+            or trade agreement provisions."),
+            p("The structural gravity model is the workhorse of international
+            trade analysis. The gravity model of trade is a structural model
+            with solid theoretical foundations. This property makes the gravity
+            framework particularly appropriate for counterfactual analysis,
+            such as quantifying the effects of trade policy."),
+            p(" "),
+            h1("How to use this tool"),
+            HTML("<p>Go to the <i>Model</i> section, filter the years, reporters and
+              importers. Select the model type and proceed to fit the model.
+              Each option has a help button next to it with the relevant details.</p>"),
+            HTML("<p>Proceed to the <i>Simulate</i> section, where you can generate
+              a counterfactual scenario by altering the actual RTAs and Tariffs
+              situation. You can skip this section if you want to.</p>"),
+            HTML("<p>Go to the <i>Download</i> section, which is displayed after
+              you are ready with the <i>Model</i> section, where you can download
+              the dataset used for the estimation and the fitted model.</p>"),
+            HTML("<p>You can find the citation in HTML and BibTeX format in the
+              <i>Cite</i> section.</p>"),
+            h1("Technical details"),
+            HTML("<p>This tool can estimate the traditional gravity model,
+                 by including GDPs, colonial links, common language, contiguity,
+                 trade agreements and tariffs. But the tool also allows to
+                 estimate structural gravity, by easily allowing to include of
+                 importer and exporter fixed effects, even allowing to switch
+                 between OLS and PPML regression.</p>"),
+            HTML("<p>As an example, say we want to explore the effect of
+                 distance, contiguity and tariffs on imports for NAFTA
+                 members in the years 2012, 2016 and 2020. Then we could estimate
+                 the model
+                 <i>trade ~ log(dist) + contig + tariff</i> and set the tool to
+                 use PPML, as in the next image</p>"),
+            HTML("<img src='https://shiny.tradestatistics.io/images/ppml_demo.png' alt='PPML demo'/>")
           )
         ),
 
@@ -647,7 +651,7 @@ golem_add_external_resources <- function() {
     favicon(),
     bundle_resources(
       path = app_sys("app/www"),
-      app_title = "UN ESCAP - TTC Structural Gravity"
+      app_title = "ESCAP - TTC Structural Gravity"
     )
     # Add here other external resources
     # for example, you can add shinyalert::useShinyalert()

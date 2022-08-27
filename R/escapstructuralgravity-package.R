@@ -8,7 +8,7 @@ styles <- list(
 
 shiny::shinyOptions(
   cache = cachem::cache_disk(
-    dir = "/tradestatistics/ttcstructuralgravity_cache"
-    # logfile = "/tradestatistics/log/countryprofile_cache.log"
+    dir = "/tradestatistics/escapstructuralgravity_cache"
+    # logfile = "/tradestatistics/log/escapstructuralgravity_cache.log"
   )
 )
