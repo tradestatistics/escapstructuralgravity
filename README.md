@@ -1,7 +1,7 @@
 # escapstructuralgravity
 
 The goal of escapstructuralgravity is to simulate the effect of policy variables 
-over international trade flows for different countries. This project was funded by UN ESCAP.
+over international trade flows for different countries.
 
 ## Run the dashboard locally
 
