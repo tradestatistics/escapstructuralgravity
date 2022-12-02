@@ -62,6 +62,9 @@ app_ui <- function(request) {
             such as quantifying the effects of trade policy."),
             p(" "),
             h1("How to use this tool"),
+            HTML("<p>We provide detailed
+                 <a href='https://gravity.tiid.org/user_instructions.pdf'>instructions</a>
+                 in PDF format.</p>"),
             HTML("<p>Go to the <i>Model</i> section, filter the years, reporters and
               importers. Select the model type and proceed to fit the model.
               Each option has a help button next to it with the relevant details.</p>"),
@@ -332,7 +335,7 @@ app_ui <- function(request) {
                     content = c("Select any CSV/TSV/XLSX (Excel) or SAV/DTA (SPSS/Stata) file.",
                                 "In order to join you own data to the data in our API, you need at least to provide year, reporter
                               and partner. See this
-                              <a href='https://raw.githubusercontent.com/pachadotdev/tradestatistics-visualization-with-shiny/master/custom_variables_for_modelling_demo.csv'>example</a>
+                              <a href='https://gravity.tiid.org/custom_variables_for_modelling_demo.csv'>example</a>
                               that uses ISO-3 codes for reporters and partners.",
                                 "Any rows that doesn't match will be dropped and the data for the analysis will be the <b>intersection</b> between yours and ours."),
                     buttonLabel = "Got it!",
