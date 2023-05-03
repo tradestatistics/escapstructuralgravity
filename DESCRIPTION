@@ -17,7 +17,7 @@ Imports:
     cachem (>= 1.0.6),
     config (>= 0.3.1),
     dplyr (>= 1.0.9),
-    fixest (>= 2022.05.22),
+    fixest (>= 0.10.4),
     ggplot2,
     glue (>= 1.6.2),
     golem (>= 0.3.2),
@@ -46,4 +46,4 @@ Remotes:
 Config/testthat/edition: 3
 Encoding: UTF-8
 Language: en-US
-RoxygenNote: 7.2.1
+RoxygenNote: 7.2.2

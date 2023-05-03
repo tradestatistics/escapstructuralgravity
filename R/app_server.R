@@ -7,7 +7,7 @@
 #' @importFrom broom glance tidy
 #' @importFrom dplyr arrange bind_rows case_when collect everything ends_with
 #'     filter group_by inner_join left_join mutate pull select summarise tbl
-#'     ungroup
+#'     ungroup distinct pull rename mutate_if
 #' @importFrom fixest feols feglm
 #' @importFrom glue glue
 #' @importFrom ggplot2 aes facet_wrap geom_col ggplot labs scale_fill_viridis_d
@@ -20,9 +20,10 @@
 #' @importFrom stats as.formula predict quasipoisson
 #' @importFrom shinyhelper helper observe_helpers
 #' @importFrom shinyjs hide show
-#' @importFrom tidyr pivot_longer
+#' @importFrom tidyr pivot_longer expand_grid
 #' @importFrom utils head
 #' @importFrom waiter Waitress
+#' @importFrom GEGravity ge_gravity
 #' @noRd
 app_server <- function(input, output, session) {
   # Connect to SQL ----
@@ -74,10 +75,11 @@ app_server <- function(input, output, session) {
   inp_rc <- reactive({ input$rc }) # rta action
   inp_rm <- reactive({ input$rm }) # rta modification
   inp_ry <- reactive({ input$ry }) # rta year
+  inp_re <- reactive({ input$re }) # rta trade elasticity
 
-  inp_mc <- reactive({ input$mc }) # mfa action
-  inp_mm <- reactive({ input$mm }) # mfa modification
-  inp_my <- reactive({ input$my }) # mfa year
+  # inp_mc <- reactive({ input$mc }) # mfa action
+  # inp_mm <- reactive({ input$mm }) # mfa modification
+  # inp_my <- reactive({ input$my }) # mfa year
 
   # Simulation ----
 
@@ -513,154 +515,130 @@ app_server <- function(input, output, session) {
     wt2$notify(position = "br")
     wt2$inc(1)
 
-    d <- df_dtl_2() %>%
-      filter(
-        !!sym("importer") %in% unique(!!inp_rc(), !!inp_mc())
-      )
-
-    wt2$inc(1)
-
-    d <- d %>% mutate(`UNFEASIBLE` = NA_real_, `ESTIMATION` = NA_real_)
-
-    d <- d %>%
-      mutate(predicted_trade = predict(fit(), newdata = d)) %>%
-      ungroup() %>%
-      select(!!sym("year"), !!sym("importer"), !!sym("trade"),
-             !!sym("predicted_trade")) %>%
-      group_by(!!sym("year"), !!sym("importer")) %>%
-      summarise(
-        trade = sum(!!sym("trade"), na.rm = T),
-        predicted_trade = sum(!!sym("predicted_trade"), na.rm = T)
-      )
-
-    wt2$inc(1)
-
-    d <- d %>%
-      pivot_longer(!!sym("trade"):!!sym("predicted_trade"),
-                   names_to = "variable", values_to = "value")
-
-    wt2$inc(1)
-
-    d <- d %>%
-      mutate(
-        variable = case_when(
-          !!sym("variable") == "trade" ~ "Observed trade",
-          TRUE ~ "Predicted trade"
-        )
-      )
-
-    wt2$inc(1)
-
     d2 <- df_dtl_2() %>%
-      filter(
-        !!sym("importer") %in% unique(!!inp_rc(), !!inp_mc())
-      )
+      filter(!!sym("year") == inp_ry()) %>%
+      select(!!sym("exporter"), !!sym("importer"), !!sym("trade"), !!sym("rta"))
 
-    print(d2)
+    d2_full <- unique(c(d2 %>% distinct(!!sym("exporter")) %>% pull(),
+        d2 %>% distinct(!!sym("importer")) %>% pull()))
+
+    d2 <- expand_grid(exporter = d2_full, importer = d2_full) %>%
+      arrange(!!sym("exporter"), !!sym("importer")) %>%
+      left_join(d2) %>%
+      mutate_if(is.numeric, function(x) ifelse(is.na(x), 0, x))
+
+    rm(d2_full)
+
+    wt2$inc(1)
 
     if (length(inp_rc()) > 0) {
       d2_1 <- d2 %>%
-        select(c("year", "trade", "importer", "exporter", "rta")) %>%
-        filter(
-          !!sym("importer") %in% !!inp_rc()
-        ) %>%
+        select(c("importer", "exporter", "rta")) %>%
         mutate(
           rta = case_when(
-            !!sym("year") >= !!inp_ry() &
-              !!sym("importer") %in% !!inp_rc()  ~ as.integer(!!inp_rm()),
+            !!sym("exporter") %in% !!inp_rc() & !!sym("importer") %in% !!inp_rc() ~ as.integer(!!inp_rm()),
+            !!sym("importer") %in% !!inp_rc() & !!sym("exporter") %in% !!inp_rc() ~ as.integer(!!inp_rm()),
             TRUE ~ !!sym("rta")
           )
         )
     }
 
-    if (length(inp_mc()) > 0) {
-      d2_2 <- d2 %>%
-        select(c("year", "trade", "importer", "exporter", "tariff")) %>%
-        filter(
-          !!sym("importer") %in% !!inp_mc()
-        ) %>%
-        mutate(
-          tariff = case_when(
-            !!sym("year") >= !!inp_my() &
-              !!sym("importer") %in% !!inp_mc() ~ as.integer(!!inp_mm()) / 100,
-            TRUE ~ !!sym("tariff")
-          )
-        )
-    }
-
     d2 <- d2 %>%
-      left_join(d2_1, by = c("year", "importer", "exporter", "trade")) %>%
-      left_join(d2_2, by = c("year", "importer", "exporter", "trade")) %>%
+      left_join(d2_1, by = c("importer", "exporter")) %>%
       mutate(
-        rta = case_when(
+        # rta = case_when(
+        #   !is.na(!!sym("rta.x")) ~ !!sym("rta.x"),
+        #   TRUE ~ 0
+        # ),
+        rta2 = case_when(
           !is.na(!!sym("rta.y")) ~ !!sym("rta.y"),
           TRUE ~ !!sym("rta.x")
-        ),
-        tariff = case_when(
-          !is.na(!!sym("tariff.y")) ~ !!sym("tariff.y"),
-          TRUE ~ !!sym("tariff.x")
         )
       ) %>%
       select(-ends_with(".x"), -ends_with(".y"))
 
     wt2$inc(1)
 
-    d2 <- d2 %>% mutate(`UNFEASIBLE` = NA_real_, `ESTIMATION` = NA_real_)
+    # d2 <- d2 %>%
+    #   mutate(`UNFEASIBLE` = NA_real_, `ESTIMATION` = NA_real_)
 
     d2 <- d2 %>%
-      mutate(predicted_trade = predict(fit(), newdata = d2)) %>%
-      select(!!sym("year"), !!sym("importer"), !!sym("predicted_trade")) %>%
-      group_by(!!sym("year"), !!sym("importer")) %>%
-      summarise(
-        predicted_trade = sum(!!sym("predicted_trade"), na.rm = T)
+      mutate(
+        # rta_effect = !!sym("rta") * fit()$coefficients["rta"],
+        rta2_effect = !!sym("rta2") * fit()$coefficients["rta"]
       )
 
-    wt2$inc(1)
+    # d2_1 <- ge_gravity(
+    #   exp_id = d2$exporter,     # Origin country associated with each observation
+    #   imp_id = d2$importer,     # Destination country associated with each observation
+    #   flows  = d2$trade + 1000, # Observed trade flows in the data for the year being used as the baseline
+    #   beta   = d2$rta_effect,   # "Partial" change in trade, obtained as coefficient from gravity estimation
+    #   theta  = inp_re(),        # Trade elasticity
+    #   mult   = FALSE,           # Assume trade balance is an additive component of national expenditure
+    #   data   = d2 %>%
+    #     select(!!sym("exporter"), !!sym("importer"))
+    # )
+
+    d2_2 <- ge_gravity(
+      exp_id = d2$exporter,     # Origin country associated with each observation
+      imp_id = d2$importer,     # Destination country associated with each observation
+      flows  = d2$trade + 1000,        # Observed trade flows in the data for the year being used as the baseline
+      beta   = d2$rta2_effect,   # "Partial" change in trade, obtained as coefficient from gravity estimation
+      theta  = inp_re(),        # Trade elasticity
+      mult   = FALSE,           # Assume trade balance is an additive component of national expenditure
+      data   = d2 %>%
+        select(!!sym("exporter"), !!sym("importer"))
+    )
+
+    # print(d2_1)
+    # print(d2_2)
+
+    # d2_1 <- d2_1 %>%
+    #   filter(!!sym("exporter") %in% !!inp_rc()) %>%
+    #   rename(trade = !!sym("new_trade")) %>%
+    #   group_by(!!sym("exporter")) %>%
+    #   summarise(
+    #     trade = sum(!!sym("trade"), na.rm = T)
+    #   ) %>%
+    #   mutate(observation = "Predicted trade")
+
+    d2_2 <- d2_2 %>%
+      filter(!!sym("exporter") %in% !!inp_rc()) %>%
+      rename(trade = !!sym("new_trade")) %>%
+      group_by(!!sym("exporter")) %>%
+      summarise(
+        trade = sum(!!sym("trade"), na.rm = T)
+      ) %>%
+      mutate(observation = "Predicted trade (altered RTAs)")
 
     d2 <- d2 %>%
-      pivot_longer(!!sym("predicted_trade"),
-                   names_to = "variable", values_to = "value")
-
-    wt2$inc(1)
-
-    d2 <- d2 %>%
-      mutate(variable = "Predicted trade (altered RTA and/or Tariff)")
-
-    d <- d %>% bind_rows(d2) %>%
-      arrange(!!sym("year"), !!sym("importer"))
-
-    rm(d2)
-
-    wt2$inc(1)
-
-    d$variable <- factor(d$variable,
-                         levels = c("Observed trade",
-                                    "Predicted trade",
-                                    "Predicted trade (altered RTA and/or Tariff)"))
+      filter(!!sym("exporter") %in% !!inp_rc()) %>%
+      group_by(!!sym("exporter")) %>%
+      summarise(
+        trade = sum(!!sym("trade"), na.rm = T)
+      ) %>%
+      mutate(observation = "Observed trade") %>%
+      # bind_rows(d2_1) %>%
+      bind_rows(d2_2)
 
     wt2$inc(1)
 
     wt2$close()
 
-    return(d)
+    return(d2)
   }) %>%
     bindCache(
       inp_y(), inp_r(), inp_p(), inp_t(), inp_z(),
       inp_d(), inp_c(), inp_s(),
       fml(),
-      # lhs(), rhs(), raw_lhs(), raw_rhs(),
-      inp_rc(), inp_rm(), inp_ry(),
-      inp_mc(), inp_mm(), inp_my()
+      inp_rc(), inp_rm(), inp_ry(), inp_re()
     ) %>%
     bindEvent(input$go2)
 
   pred_trade_plot <- reactive({
-    # print(pred_trade_table())
-    g <- ggplot(data = pred_trade_table() %>% mutate(year = as.character(!!sym("year")))) +
-      geom_col(aes(x = !!sym("year"), y = !!sym("value"), fill = !!sym("variable")), position = "dodge2") +
-      facet_wrap(~importer) +
-      labs(x = "Year", y = "USD billion",
-           title = "Observed vs simulated data") +
+    g <- ggplot(data = pred_trade_table()) +
+      geom_col(aes(x = toupper(!!sym("exporter")), y = !!sym("trade"), fill = !!sym("observation")), position = "dodge2") +
+      labs(x = "Exporter", y = "USD", title = "Observed vs simulated data") +
       scale_fill_viridis_d() +
       theme_minimal()
 
@@ -670,9 +648,7 @@ app_server <- function(input, output, session) {
       inp_y(), inp_r(), inp_p(), inp_t(), inp_z(),
       inp_d(), inp_c(), inp_s(),
       fml(),
-      # lhs(), rhs(), raw_lhs(), raw_rhs(),
-      inp_rc(), inp_rm(), inp_ry(),
-      inp_mc(), inp_mm(), inp_my()
+      inp_rc(), inp_rm(), inp_ry()
     ) %>%
     bindEvent(input$go2)
 
@@ -717,9 +693,10 @@ app_server <- function(input, output, session) {
 
   output$rc <- renderUI({
     # here we update the RTA modification selection after inp_r+inp_p
-    rp <- unique(as.character(inp_r()), as.character(inp_p()))
-    if (any(rp == "all")) { rp <- rp[rp != "all"] }
-    if (length(rp) == 0) { rp <- "all" }
+    # rp <- unique(as.character(inp_r()), as.character(inp_p()))
+    # if (any(rp == "all")) { rp <- rp[rp != "all"] }
+    # if (length(rp) == 0) { rp <- "all" }
+    rp <- as.character(inp_p())
 
     selectInput(
       "rc",
@@ -792,7 +769,7 @@ app_server <- function(input, output, session) {
   output$fit_glance <- renderTable({ glance(fit()) })
   output$fit_cat <- renderPrint({ fit() })
   output$pred_stl <- renderText({ pred_stl() })
-  # output$pred_trade_table <- renderTable({ pred_trade_table() })
+  output$pred_trade_table <- renderTable({ pred_trade_table() })
   output$pred_trade_plot <- renderPlotly({ pred_trade_plot() })
 
   ## Download ----

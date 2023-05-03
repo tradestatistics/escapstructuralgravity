@@ -164,7 +164,7 @@ app_ui <- function(request) {
                   "r",
                   "Importer",
                   choices = available_reporters_iso(),
-                  selected = c("can", "mex", "usa"),
+                  selected = "all",
                   selectize = TRUE,
                   width = "100%",
                   multiple = TRUE
@@ -185,7 +185,7 @@ app_ui <- function(request) {
                   "p",
                   "Exporter",
                   choices = available_reporters_iso(),
-                  selected = "all",
+                  selected = c("can","usa","mex"),
                   selectize = TRUE,
                   width = "100%",
                   multiple = TRUE
@@ -349,7 +349,7 @@ app_ui <- function(request) {
                 textInput(
                   "fml",
                   "Model formula",
-                  "trade ~ log(dist) + log(gdp_exporter) + colony + comlang_off + contig + rta + tariff",
+                  "trade ~ log(dist) + log(gdp_exporter) + colony + comlang_off + contig + rta | exporter + importer",
                   width = "100%",
                   placeholder = "Any valid R formula"
                 ) %>%
@@ -479,7 +479,7 @@ app_ui <- function(request) {
               col_4(
                 sliderInput(
                   "ry",
-                  "Since year",
+                  "For the year",
                   min = available_yrs_min(),
                   max = available_yrs_max(),
                   value = 2002,
@@ -505,71 +505,100 @@ app_ui <- function(request) {
                   )
               ),
 
-              ## Tariff changes ----
-
-              col_12(
-                hr(),
-                h2("Tariff modification")
-              ),
-
-              col_4(
-                uiOutput("mc")
-              ),
-
               col_4(
                 sliderInput(
-                  "mm",
-                  "Tariff modification (%)",
-                  min = 0,
-                  max = 30,
-                  value = 10,
-                  width = "100%"
-                ) %>%
-                  helper(
-                    type = "inline",
-                    title = "Alter tarriff situation for",
-                    content = c("This corresponds to a 'what if' situation, for example, what would have happened (according
-                              to the model) if the countries you've chosen increased/decreased their MFN avg rate starting in
-                              a certain year (i.e. what if Chile would have increased their weighted average MFN/PFR rate to
-                              25% since 2020).",
-                                "",
-                                "<b>References</b>",
-                                "Yotov, Y. V., Piermartini, R., and Larch, M. <i><a href='https://www.wto.org/english/res_e/publications_e/advancedguide2016_e.htm'>An Advanced Guide to Trade Policy Analysis: The Structural Gravity Model</a></i>. WTO iLibrary, 2016."),
-                    buttonLabel = "Got it!",
-                    easyClose = FALSE,
-                    fade = TRUE,
-                    size = "s"
-                  )
-              ),
-
-              col_4(
-                sliderInput(
-                  "my",
-                  "Since year",
-                  min = available_yrs_min(),
-                  max = available_yrs_max(),
-                  value = 2002,
+                  "re",
+                  "Trade elasticity",
+                  min = 1,
+                  max = 10,
+                  value = 4,
                   sep = "",
-                  step = 1,
+                  step = 0.5,
                   ticks = FALSE,
                   width = "100%"
                 ) %>%
                   helper(
                     type = "inline",
-                    title = "Alter tarriff situation for",
-                    content = c("This corresponds to a 'what if' situation, for example, what would have happened (according
-                              to the model) if the countries you've chosen increased/decreased their MFN avg rate starting in
-                              a certain year (i.e. what if Chile would have increased their weighted average MFN/PFR rate to
-                              25% since 2020).",
+                    title = "Trade elasticity",
+                    content = c("This corresponds to a parameter that is required for general equilibrium estimation. When doing this,
+                                 we obtain more realistic effects of trade compared to a naive prediction directly from the fitted
+                                 values in the PPML/OLS model.
+                                ",
                                 "",
                                 "<b>References</b>",
-                                "Yotov, Y. V., Piermartini, R., and Larch, M. <i><a href='https://www.wto.org/english/res_e/publications_e/advancedguide2016_e.htm'>An Advanced Guide to Trade Policy Analysis: The Structural Gravity Model</a></i>. WTO iLibrary, 2016."),
+                                "Baier, Scott L., Yoto V. Yotov, and Thomas Zylkin. \"On the widely differing effects of free trade agreements: Lessons from twenty years of trade integration\". Journal of International Economics 116 (2019): 206-226."),
                     buttonLabel = "Got it!",
                     easyClose = FALSE,
                     fade = TRUE,
                     size = "s"
                   )
               ),
+
+              ## Tariff changes ----
+
+              # col_12(
+              #   hr(),
+              #   h2("Tariff modification")
+              # ),
+              #
+              # col_4(
+              #   uiOutput("mc")
+              # ),
+              #
+              # col_4(
+              #   sliderInput(
+              #     "mm",
+              #     "Tariff modification (%)",
+              #     min = 0,
+              #     max = 30,
+              #     value = 10,
+              #     width = "100%"
+              #   ) %>%
+              #     helper(
+              #       type = "inline",
+              #       title = "Alter tarriff situation for",
+              #       content = c("This corresponds to a 'what if' situation, for example, what would have happened (according
+              #                 to the model) if the countries you've chosen increased/decreased their MFN avg rate starting in
+              #                 a certain year (i.e. what if Chile would have increased their weighted average MFN/PFR rate to
+              #                 25% since 2020).",
+              #                   "",
+              #                   "<b>References</b>",
+              #                   "Yotov, Y. V., Piermartini, R., and Larch, M. <i><a href='https://www.wto.org/english/res_e/publications_e/advancedguide2016_e.htm'>An Advanced Guide to Trade Policy Analysis: The Structural Gravity Model</a></i>. WTO iLibrary, 2016."),
+              #       buttonLabel = "Got it!",
+              #       easyClose = FALSE,
+              #       fade = TRUE,
+              #       size = "s"
+              #     )
+              # ),
+              #
+              # col_4(
+              #   sliderInput(
+              #     "my",
+              #     "Since year",
+              #     min = available_yrs_min(),
+              #     max = available_yrs_max(),
+              #     value = 2002,
+              #     sep = "",
+              #     step = 1,
+              #     ticks = FALSE,
+              #     width = "100%"
+              #   ) %>%
+              #     helper(
+              #       type = "inline",
+              #       title = "Alter tarriff situation for",
+              #       content = c("This corresponds to a 'what if' situation, for example, what would have happened (according
+              #                 to the model) if the countries you've chosen increased/decreased their MFN avg rate starting in
+              #                 a certain year (i.e. what if Chile would have increased their weighted average MFN/PFR rate to
+              #                 25% since 2020).",
+              #                   "",
+              #                   "<b>References</b>",
+              #                   "Yotov, Y. V., Piermartini, R., and Larch, M. <i><a href='https://www.wto.org/english/res_e/publications_e/advancedguide2016_e.htm'>An Advanced Guide to Trade Policy Analysis: The Structural Gravity Model</a></i>. WTO iLibrary, 2016."),
+              #       buttonLabel = "Got it!",
+              #       easyClose = FALSE,
+              #       fade = TRUE,
+              #       size = "s"
+              #     )
+              # ),
 
               ## Simulation results ----
               col_12(
@@ -587,10 +616,10 @@ app_ui <- function(request) {
                 col_12(
                   htmlOutput("pred_stl", container = tags$h2)
                 ),
-                # col_6(
-                #   tableOutput("pred_trade_table")
-                # ),
-                col_12(
+                col_6(
+                  tableOutput("pred_trade_table")
+                ),
+                col_6(
                   plotlyOutput("pred_trade_plot")
                 )
               )
