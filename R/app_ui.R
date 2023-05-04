@@ -83,14 +83,8 @@ app_ui <- function(request) {
                  estimate basic gravity and also structural gravity, which
                  unlike the former, includes importer and exporter fixed effects.
                  In addition, we can switch between OLS and PPML regression.</p>"),
-            HTML("<p>As an example, say we want to explore the effect of
-                 distance, contiguity and tariffs on imports for NAFTA
-                 members in the years 2012, 2016 and 2020. Then we could estimate
-                 the model
-                 <i>trade ~ log(dist) + contig + rta</i> and set the tool to
-                 use PPML with clustered standard errors (i.e., by country pairs),
-                 as in the next animation. You can see more details by
-                 clicking '?' in the actual sliders and dropdowns.</p>"),
+            HTML("<p>Please click play on the video to see a short demonstration
+                 on how to use this tool.</p>"),
             HTML("<video controls>
                  <source src='https://shiny.tradestatistics.io/images/ppml_demo.mp4' type='video/mp4'>
                  Your browser does not support the video tag.
