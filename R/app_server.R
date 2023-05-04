@@ -515,6 +515,44 @@ app_server <- function(input, output, session) {
     wt2$notify(position = "br")
     wt2$inc(1)
 
+    ### model prediction ----
+
+    d1 <-  d <- df_dtl_2() %>%
+      filter(!!sym("exporter") %in% !!inp_rc(), !!sym("year") == !!inp_ry())
+
+    if (length(inp_rc()) > 0) {
+      d1_1 <- d1 %>%
+        select(c("importer", "exporter", "rta")) %>%
+        mutate(
+          rta = case_when(
+            !!sym("exporter") %in% !!inp_rc() & !!sym("importer") %in% !!inp_rc() ~ as.integer(!!inp_rm()),
+            !!sym("importer") %in% !!inp_rc() & !!sym("exporter") %in% !!inp_rc() ~ as.integer(!!inp_rm()),
+            TRUE ~ !!sym("rta")
+          )
+        )
+
+      d1 <- d1 %>%
+        left_join(d1_1, by = c("importer", "exporter")) %>%
+        mutate(
+          rta = case_when(
+            !is.na(!!sym("rta.y")) ~ !!sym("rta.y"),
+            TRUE ~ !!sym("rta.x")
+          )
+        ) %>%
+        select(-ends_with(".x"), -ends_with(".y"))
+    }
+
+    d1 <- d1 %>%
+      mutate(trade = predict(fit(), newdata = d1)) %>%
+      ungroup() %>%
+      group_by(!!sym("exporter")) %>%
+      summarise(trade = sum(!!sym("trade"), na.rm = T)) %>%
+      mutate(observation = "Fitted values")
+
+    wt2$inc(1)
+
+    ### ge prediction ----
+
     d2 <- df_dtl_2() %>%
       filter(!!sym("year") == inp_ry()) %>%
       select(!!sym("exporter"), !!sym("importer"), !!sym("trade"), !!sym("rta"))
@@ -541,85 +579,50 @@ app_server <- function(input, output, session) {
             TRUE ~ !!sym("rta")
           )
         )
-    }
 
-    d2 <- d2 %>%
-      left_join(d2_1, by = c("importer", "exporter")) %>%
-      mutate(
-        # rta = case_when(
-        #   !is.na(!!sym("rta.x")) ~ !!sym("rta.x"),
-        #   TRUE ~ 0
-        # ),
-        rta2 = case_when(
-          !is.na(!!sym("rta.y")) ~ !!sym("rta.y"),
-          TRUE ~ !!sym("rta.x")
-        )
-      ) %>%
-      select(-ends_with(".x"), -ends_with(".y"))
+      d2 <- d2 %>%
+        left_join(d2_1, by = c("importer", "exporter")) %>%
+        mutate(
+          rta = case_when(
+            !is.na(!!sym("rta.y")) ~ !!sym("rta.y"),
+            TRUE ~ !!sym("rta.x")
+          )
+        ) %>%
+        select(-ends_with(".x"), -ends_with(".y"))
+    }
 
     wt2$inc(1)
 
-    # d2 <- d2 %>%
-    #   mutate(`UNFEASIBLE` = NA_real_, `ESTIMATION` = NA_real_)
-
     d2 <- d2 %>%
-      mutate(
-        # rta_effect = !!sym("rta") * fit()$coefficients["rta"],
-        rta2_effect = !!sym("rta2") * fit()$coefficients["rta"]
-      )
+      mutate(rta_effect = !!sym("rta") * fit()$coefficients["rta"])
 
-    # d2_1 <- ge_gravity(
-    #   exp_id = d2$exporter,     # Origin country associated with each observation
-    #   imp_id = d2$importer,     # Destination country associated with each observation
-    #   flows  = d2$trade + 1000, # Observed trade flows in the data for the year being used as the baseline
-    #   beta   = d2$rta_effect,   # "Partial" change in trade, obtained as coefficient from gravity estimation
-    #   theta  = inp_re(),        # Trade elasticity
-    #   mult   = FALSE,           # Assume trade balance is an additive component of national expenditure
-    #   data   = d2 %>%
-    #     select(!!sym("exporter"), !!sym("importer"))
-    # )
-
-    d2_2 <- ge_gravity(
+    d2_1 <- ge_gravity(
       exp_id = d2$exporter,     # Origin country associated with each observation
       imp_id = d2$importer,     # Destination country associated with each observation
-      flows  = d2$trade + 1000,        # Observed trade flows in the data for the year being used as the baseline
-      beta   = d2$rta2_effect,   # "Partial" change in trade, obtained as coefficient from gravity estimation
+      flows  = d2$trade + 1000, # Observed trade flows in the data for the year being used as the baseline
+      beta   = d2$rta_effect,   # "Partial" change in trade, obtained as coefficient from gravity estimation
       theta  = inp_re(),        # Trade elasticity
       mult   = FALSE,           # Assume trade balance is an additive component of national expenditure
       data   = d2 %>%
         select(!!sym("exporter"), !!sym("importer"))
     )
 
-    # print(d2_1)
-    # print(d2_2)
-
-    # d2_1 <- d2_1 %>%
-    #   filter(!!sym("exporter") %in% !!inp_rc()) %>%
-    #   rename(trade = !!sym("new_trade")) %>%
-    #   group_by(!!sym("exporter")) %>%
-    #   summarise(
-    #     trade = sum(!!sym("trade"), na.rm = T)
-    #   ) %>%
-    #   mutate(observation = "Predicted trade")
-
-    d2_2 <- d2_2 %>%
+    d2_1 <- d2_1 %>%
       filter(!!sym("exporter") %in% !!inp_rc()) %>%
       rename(trade = !!sym("new_trade")) %>%
       group_by(!!sym("exporter")) %>%
-      summarise(
-        trade = sum(!!sym("trade"), na.rm = T)
-      ) %>%
-      mutate(observation = "Predicted trade (altered RTAs)")
+      summarise(trade = sum(!!sym("trade"), na.rm = T)) %>%
+      mutate(observation = "GE simulation")
 
     d2 <- d2 %>%
       filter(!!sym("exporter") %in% !!inp_rc()) %>%
       group_by(!!sym("exporter")) %>%
-      summarise(
-        trade = sum(!!sym("trade"), na.rm = T)
-      ) %>%
+      summarise(trade = sum(!!sym("trade"), na.rm = T)) %>%
       mutate(observation = "Observed trade") %>%
-      # bind_rows(d2_1) %>%
-      bind_rows(d2_2)
+      bind_rows(d2_1) %>%
+      bind_rows(d1)
+
+    print(d2)
 
     wt2$inc(1)
 
