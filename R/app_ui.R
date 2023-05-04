@@ -85,7 +85,7 @@ app_ui <- function(request) {
                  In addition, we can switch between OLS and PPML regression.</p>"),
             HTML("<p>Please click play on the video to see a short demonstration
                  on how to use this tool.</p>"),
-            HTML("<video controls>
+            HTML("<video controls width='800'>
                  <source src='https://shiny.tradestatistics.io/images/ppml_demo.mp4' type='video/mp4'>
                  Your browser does not support the video tag.
                  </video>"),
