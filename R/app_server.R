@@ -212,7 +212,7 @@ app_server <- function(input, output, session) {
     dtrade <- dtrade %>%
       mutate(
         !!sym("tij_bar") := exp(!!sym("fe_pair_id_2_bln")),
-        !!sym("tij_bln") := exp(!!sym("fe_pair_id_2_bln") + fit_baseline_app2$coefficients[!!sym("rta")] * !!sym("rta"))
+        !!sym("tij_bln") := exp(!!sym("fe_pair_id_2_bln") + fit_baseline_app2$coefficients["rta"] * !!sym("rta"))
       )
 
     wt$inc(0.03)
@@ -254,7 +254,7 @@ app_server <- function(input, output, session) {
       left_join(ch2_application2_2, by = c("exporter", "importer")) %>%
       mutate(
         !!sym("tij_bar") := ifelse(is.na(!!sym("tij_bar")), !!sym("tij_no_rta"), !!sym("tij_bar")),
-        !!sym("tij_bln") := ifelse(is.na(!!sym("tij_bln")), !!sym("tij_bar") * exp(fit_baseline_app2$coefficients[!!sym("rta")] * !!sym("rta")), !!sym("tij_bln"))
+        !!sym("tij_bln") := ifelse(is.na(!!sym("tij_bln")), !!sym("tij_bar") * exp(fit_baseline_app2$coefficients["rta"] * !!sym("rta")), !!sym("tij_bln"))
       ) %>%
       select(-!!sym("tij_no_rta"))
 
@@ -311,7 +311,7 @@ app_server <- function(input, output, session) {
     dtrade <- dtrade %>%
       mutate(
         !!sym("no_rta") := ifelse(!!sym("exporter") %in% inp_c() & !!sym("importer") %in% inp_c(), 0, !!sym("rta")),
-        !!sym("tij_cfl") := !!sym("tij_bar") * exp(fit_baseline_app2$coefficients[!!sym("rta")] * !!sym("no_rta"))
+        !!sym("tij_cfl") := !!sym("tij_bar") * exp(fit_baseline_app2$coefficients["rta"] * !!sym("no_rta"))
       )
 
     wt$inc(0.03)
