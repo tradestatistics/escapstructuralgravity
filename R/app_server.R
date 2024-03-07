@@ -3,36 +3,30 @@
 #' @param input,output,session Internal parameters for {shiny}.
 #'     DO NOT REMOVE.
 #' @import shiny
-#' @import otsshinycommon
 #' @importFrom broom glance tidy
 #' @importFrom dplyr arrange bind_rows case_when collect everything ends_with
 #'     filter group_by inner_join left_join mutate pull select summarise tbl
-#'     ungroup distinct pull rename mutate_if
-#' @importFrom fixest feols feglm
+#'     ungroup distinct pull rename mutate_if row_number starts_with
+#' @importFrom fixest fepois fixef
 #' @importFrom glue glue
-#' @importFrom ggplot2 aes facet_wrap geom_col ggplot labs scale_fill_viridis_d
-#'     theme_minimal
-#' @importFrom janitor clean_names
 #' @importFrom lubridate day year
-#' @importFrom plotly ggplotly renderPlotly
-#' @importFrom rio import export
-#' @importFrom rlang sym
-#' @importFrom stats as.formula predict quasipoisson
+#' @importFrom rlang sym :=
+#' @importFrom stats as.formula predict quasipoisson sd
 #' @importFrom shinyhelper helper observe_helpers
 #' @importFrom shinyjs hide show
-#' @importFrom tidyr pivot_longer expand_grid
 #' @importFrom utils head
 #' @importFrom waiter Waitress
-#' @importFrom GEGravity ge_gravity
+#' @importFrom readr write_csv
+#' @importFrom RPostgres dbConnect Postgres dbDisconnect
 #' @noRd
 app_server <- function(input, output, session) {
-  # Connect to SQL ----
-
-  con <- sql_con()
-
   # User inputs ----
 
   observe_helpers()
+
+  inp_d <- reactive({
+    input$d
+  })
 
   inp_y <- reactive({
     y2 <- (min(input$y[1], input$y[2])):(max(input$y[1], input$y[2]))
@@ -40,620 +34,574 @@ app_server <- function(input, output, session) {
     return(y2)
   })
 
-  inp_r <- reactive({ sort(input$r) }) # reporter
-  inp_p <- reactive({ sort(input$p) }) # partner
-  inp_t <- reactive({ input$t }) # model type
-  inp_z <- reactive({ input$z }) # drop zeros
-  inp_d <- reactive({ input$d }) # adjust dollar
-  inp_c <- reactive({ input$c }) # cluster
+  inp_yr <- reactive({
+    input$yr
+  })
+
+  inp_c <- reactive({
+    input$c
+  })
+
+  inp_cr <- reactive({
+    input$cr
+  })
+
+  inp_cr0 <- reactive({
+    paste0("0-", inp_cr())
+  })
+
   inp_s <- reactive({
-    s <- input$s
-
-    s2 <- s[nchar(s) == 2]
-
-    s4 <- otsshinycommon::commodities %>%
-      filter(
-        !(!!sym("section_code") %in% s2),
-        !!sym("section_code") %in% s[nchar(s) == 4]
-      ) %>%
-      pull(!!sym("commodity_code"))
-
-    s6 <- otsshinycommon::commodities %>%
-      filter(
-        !(!!sym("section_code") %in% s2),
-        !(!!sym("section_code") %in% s[nchar(s) == 4]),
-        !!sym("section_code") %in% s[nchar(s) == 6]
-      ) %>%
-      pull(!!sym("commodity_code"))
-
-    return(c(s2, s4, s6))
-  }) # section/commodity
-
-  inp_fml <- reactive({ input$fml })
-  inp_fmt <- reactive({ input$fmt })
-
-  inp_rc <- reactive({ input$rc }) # rta action
-  inp_rm <- reactive({ input$rm }) # rta modification
-  inp_ry <- reactive({ input$ry }) # rta year
-  inp_re <- reactive({ input$re }) # rta trade elasticity
-
-  # inp_mc <- reactive({ input$mc }) # mfa action
-  # inp_mm <- reactive({ input$mm }) # mfa modification
-  # inp_my <- reactive({ input$my }) # mfa year
+    input$s
+  })
 
   # Simulation ----
 
   wt <- Waitress$new(theme = "overlay-percent", min = 0, max = 10)
 
-  ## 1. upload custom data ----
+  ## 1. Model parameters ----
 
-  custom_data <- eventReactive(input$go, {
-    uploaded_file <- input$own
+  max_dif <- 1
+  sd_dif <- 1
+  change_price_i_old <- 0
 
-    if(!is.null(uploaded_file)) {
-      inp_data <- import(file = uploaded_file$datapath, format = tools::file_ext(uploaded_file$name)) %>%
-        clean_names()
-
-      return(inp_data)
-    } else {
-      data.frame()
-    }
-  })
-
-  ## 2. define model formula ----
-
-  # lhs <- eventReactive(input$go, {
-  #   lhs <- gsub("\\s+", "", gsub("~.*", "", inp_fml()))
-  #   return(lhs)
-  # })
-  #
-  # rhs <- eventReactive(input$go, {
-  #   rhs <- unlist(strsplit(gsub("\\s+", "", gsub(".*~", "", inp_fml())), "\\+"))
-  #   rhs <- sort(rhs[rhs != "+"])
-  #   return(rhs)
-  # })
-  #
-  # raw_lhs <- reactive({
-  #   x <- unlist(regmatches(lhs(), gregexpr("(?<=\\().*?(?=\\))", lhs(), perl = T)))
-  #   x <- x[x != ""]
-  #   return(x)
-  # })
-  #
-  # raw_rhs <- reactive({
-  #   x <- unlist(regmatches(rhs(), gregexpr("(?<=\\().*?(?=\\))", rhs(), perl = T)))
-  #   x <- x[x != ""]
-  #   return(x)
-  # })
-
-  fml <- eventReactive(input$go, {
-    # fml <- paste0(lhs(), " ~ ", paste(rhs(), collapse = " + "))
-    return(inp_fml())
-  })
-
-  ## 3. read from SQL ----
+  ## 2. Filter data ----
 
   df_dtl <- reactive({
     print("Collecting model data...")
     wt$notify(position = "br")
 
-    ### 3.1. apply filters ----
+    wt$inc(0.03)
 
-    tbl_sql <- if (any(inp_s() != "all")) {
-      "yrpc"
+    if (inp_d() == "agtpa") {
+      dtrade <- escapstructuralgravity::agtpa_applications %>%
+        select(!!sym("exporter"), !!sym("importer"), !!sym("pair_id"), !!sym("year"), !!sym("trade"), !!sym("dist"), !!sym("cntg"), !!sym("lang"), !!sym("clny"), !!sym("rta")) %>%
+        filter(!!sym("year") %in% inp_y())
     } else {
-      "yrp"
-    }
-
-    d <- tbl(con, tbl_sql)
-
-    d <- d %>%
-      filter(
-        !!sym("year") %in% !!inp_y() &
-          !!sym("reporter_iso") != !!sym("partner_iso")
+      con <- dbConnect(
+        drv = Postgres(), dbname = "structural_gravity",
+        host = "localhost", user = Sys.getenv("TRADESTATISTICS_SQL_USR"),
+        password = Sys.getenv("TRADESTATISTICS_SQL_PWD")
       )
 
-    if (any(inp_r() != "all")) {
-      d <- d %>%
-        filter(
-          !!sym("reporter_iso") %in% !!inp_r()
-        )
-    }
-
-    if (any(inp_p() != "all")) {
-      d <- d %>%
-        filter(
-          !!sym("partner_iso") %in% !!inp_p()
-        )
-    }
-
-    wt$inc(2)
-
-    if (any(inp_s() %in% "vaccine")) {
-      d <- d %>%
-        left_join(
-          tbl(con, "vaccine_inputs")
-        ) %>%
-        mutate(
-          section_code = case_when(
-            !!sym("is_vaccine_input") == 1L ~ "vaccine",
-            TRUE ~ !!sym("section_code")
-          )
-        )
-    }
-
-    if (any(inp_s() != "all")) {
-      sfull <- inp_s()
-      s2 <- sfull[nchar(sfull) == 2]
-      s4 <- sfull[nchar(sfull) == 4]
-      s6 <- sfull[nchar(sfull) == 6]
-
-      d <- d %>%
-        filter(
-          !!sym("section_code") %in% s2 |
-            substr(!!sym("commodity_code"), 1, 4) %in% s4 |
-            !!sym("commodity_code") %in% s6
-        )
-    }
-
-    wt$inc(1)
-
-    #### aggregate data ----
-
-    d <- d %>%
-      select(!!sym("year"),
-             importer = !!sym("reporter_iso"),
-             exporter = !!sym("partner_iso"),
-             trade = !!sym("trade_value_usd_imp")) %>%
-      group_by(!!sym("year"), !!sym("importer"), !!sym("exporter")) %>%
-      summarise(trade = sum(!!sym("trade"), na.rm = T)) %>%
-      ungroup()
-
-    if (inp_z() == "yes") {
-      d <- d %>%
-        filter(!!sym("trade") > 0)
-    }
-
-    #### collect data ----
-
-    d <- d %>%
-      collect() %>%
-      arrange(!!sym("year"), !!sym("importer"), !!sym("exporter"))
-
-    wt$inc(1)
-
-    ### 3.2. add geo dist data ----
-
-    d <- d %>%
-      mutate(
-        country1 = pmin(!!sym("importer"), !!sym("exporter")),
-        country2 = pmax(!!sym("importer"), !!sym("exporter"))
-      ) %>%
-      inner_join(
-        tbl(con, "distances") %>% collect(),
-        by = c("country1", "country2")
-      ) %>%
-      select(-!!sym("country1"),-!!sym("country2"))
-
-    wt$inc(1)
-
-    ### 3.3. add RTA data ----
-
-    if (any(grepl("rta", fml()))) {
-      d <- d %>%
-        mutate(
-          country1 = pmin(!!sym("importer"), !!sym("exporter")),
-          country2 = pmax(!!sym("importer"), !!sym("exporter"))
-        ) %>%
-        left_join(
-          tbl(con, "rtas") %>%
-            filter(!!sym("year") %in% !!inp_y()) %>%
-            collect(),
-          by = c("year", "country1", "country2")
-        ) %>%
-        mutate(
-          rta = case_when(
-            is.na(!!sym("rta")) ~ 0L,
-            TRUE ~ !!sym("rta")
-          )
-        ) %>%
-        select(-!!sym("country1"),-!!sym("country2"))
-    }
-
-    wt$inc(2)
-
-    ### 3.4. create fixed effects ----
-
-    d <- d %>%
-      mutate(
-        importer_year = paste0(!!sym("importer"), !!sym("year")),
-        exporter_year = paste0(!!sym("exporter"), !!sym("year"))
-      )
-
-    wt$inc(.5)
-
-    ### 3.5. create clustering variable ----
-
-    if (inp_c() == "yes") {
-      d <- d %>%
-        mutate(imp_exp = paste(!!sym("importer"), !!sym("exporter"), sep = "_"))
-    }
-
-    wt$inc(.5)
-
-    ### 3.6. add GDP / GDP percap ----
-
-    if (any(grepl("gdp", fml()))) {
-      d <- d %>%
+      dtrade <- tbl(con, "usitc_trade_country") %>%
+        select(exporter = !!sym("exporter_dynamic_code"), importer = !!sym("importer_dynamic_code"), !!sym("year"), !!sym("trade")) %>%
+        filter(!!sym("year") %in% !!inp_y()) %>%
         inner_join(
-          tbl(con, "gdp") %>%
-            filter(!!sym("year") %in% !!inp_y()) %>%
-            select(!!sym("country_iso"), !!sym("year"),
-                   gdp_importer = !!sym("gdp"),
-                   gdp_percap_importer = !!sym("gdp_percap")) %>%
-            collect(),
-          by = c("importer" = "country_iso", "year")
-        )
-
-      d <- d %>%
-        inner_join(
-          tbl(con, "gdp") %>%
-            filter(!!sym("year") %in% !!inp_y()) %>%
-            select(!!sym("country_iso"), !!sym("year"),
-                   gdp_exporter = !!sym("gdp"),
-                   gdp_percap_exporter = !!sym("gdp_percap")) %>%
-            collect(),
-          by = c("exporter" = "country_iso", "year")
-        )
-    }
-
-    ### 3.7. convert dollars in time ----
-
-    if (inp_d() != "No") {
-      d <- gdp_deflator_adjustment_model(d, as.integer(inp_d()), sql_con = con)
-    }
-
-    ### 3.8. add tariffs data ----
-
-    # here we need the applied tariffs when the product gets to destination
-
-    if (any(grepl("tariff", fml()))) {
-      tar <- tbl(con, "tariffs") %>%
-        filter(
-          !!sym("year") %in% !!inp_y()
+          tbl(con, "usitc_gravity") %>%
+            select(exporter = !!sym("exporter_dynamic_code"), importer = !!sym("importer_dynamic_code"), !!sym("year"), !!sym("dist"), !!sym("cntg"), !!sym("lang"), !!sym("clny"), !!sym("rta")) %>%
+            filter(!!sym("year") %in% !!inp_y())
         ) %>%
-        select(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
-               !!sym("section_code"), !!sym("commodity_code"),
-               !!sym("tariff"))
-
-      trd <- tbl(con, "yrpc") %>%
-        filter(
-          !!sym("year") %in% !!inp_y()
-        ) %>%
-        select(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
-               !!sym("section_code"), !!sym("commodity_code"),
-               !!sym("trade_value_usd_imp"))
-
-      if (any(inp_r() != "all")) {
-        tar <- tar %>%
-          filter(
-            !!sym("reporter_iso") %in% !!inp_r()
-          )
-
-        trd <- trd %>%
-          filter(
-            !!sym("reporter_iso") %in% !!inp_r()
-          )
-      }
-
-      if (any(inp_p() != "all")) {
-        tar <- tar %>%
-          filter(
-            !!sym("partner_iso") %in% !!inp_p()
-          )
-
-        trd <- trd %>%
-          filter(
-            !!sym("partner_iso") %in% !!inp_p()
-          )
-      }
-
-      if (any(inp_s() %in% "vaccine")) {
-        tar <- tar %>%
-          left_join(
-            tbl(con, "vaccine_inputs")
-          ) %>%
-          mutate(
-            section_code = case_when(
-              !!sym("is_vaccine_input") == 1L ~ "vaccine",
-              TRUE ~ !!sym("section_code")
-            )
-          )
-
-        trd <- trd %>%
-          left_join(
-            tbl(con, "vaccine_inputs")
-          ) %>%
-          mutate(
-            section_code = case_when(
-              !!sym("is_vaccine_input") == 1L ~ "vaccine",
-              TRUE ~ !!sym("section_code")
-            )
-          )
-      }
-
-      if (any(inp_s() != "all")) {
-        tar <- tar %>%
-          filter(!!sym("section_code") %in% !!inp_s())
-
-        trd <- trd %>%
-          filter(!!sym("section_code") %in% !!inp_s())
-      }
-
-      trd <- trd %>%
-        filter(
-          !!sym("trade_value_usd_imp") > 0
-        ) %>%
-        inner_join(tar, by = c("year", "reporter_iso", "partner_iso", "commodity_code")) %>%
-        select(
-          !!sym("year"),
-          importer = !!sym("reporter_iso"),
-          exporter = !!sym("partner_iso"),
-          !!sym("trade_value_usd_imp"),
-          !!sym("tariff")
-        ) %>%
-        mutate(
-          tariff = ifelse(is.na(!!sym("tariff")), 0, !!sym("tariff")),
-          tariff_x_trade = !!sym("tariff") * !!sym("trade_value_usd_imp")
-        ) %>%
-        group_by(!!sym("year"), !!sym("importer")) %>%
-        summarise(
-          # NOT IMPLEMENTED IN POSTGRESQL
-          # needs previous line tariff_x_trade
-          # tariff = weighted.mean(!!sym("tariff"), !!sym("trade_value_usd_imp"), na.rm = T)
-          tariff = (1 / 100) * sum(!!sym("tariff_x_trade"), na.rm = T) /
-            sum(!!sym("trade_value_usd_imp"), na.rm = T)
-        ) %>%
-        ungroup() %>%
         collect()
 
-      rm(tar)
+      dbDisconnect(con)
 
-      d <- d %>%
-        inner_join(trd)
+      # create pair_id
 
-      rm(trd)
+      # escapstructuralgravity::agtpa_applications %>%
+      #   distinct(exporter, importer, pair_id)
+
+      dtrade_pair <- dtrade %>%
+        distinct(!!sym("exporter"), !!sym("importer")) %>%
+        mutate(!!sym("pair_id") := row_number())
+
+      dtrade <- dtrade %>%
+        inner_join(dtrade_pair)
+
+      dtrade
     }
 
-    wt$inc(1)
+    dtrade <- dtrade %>%
+      mutate(
+        !!sym("dist") := ifelse(is.na(log(!!sym("dist"))) | log(!!sym("dist")) == 0, 100, log(!!sym("dist"))),
+        !!sym("log_dist") := log(!!sym("dist")),
+        !!sym("intl") := ifelse(!!sym("exporter") != !!sym("importer"), 1, 0),
+        !!sym("exporter") := ifelse(!!sym("exporter") == inp_cr(), inp_cr0(), !!sym("exporter")),
+        !!sym("importer") := ifelse(!!sym("importer") == inp_cr(), inp_cr0(), !!sym("importer"))
+      ) %>%
+      # Create Yit
+      group_by(!!sym("exporter"), !!sym("year")) %>%
+      mutate(!!sym("y") := sum(!!sym("trade"), na.rm = TRUE)) %>%
+      # Create Eit
+      group_by(!!sym("importer"), !!sym("year")) %>%
+      mutate(!!sym("e") := sum(!!sym("trade"), na.rm = TRUE)) %>%
+      # Create Er
+      group_by(!!sym("year")) %>%
+      mutate(!!sym("e_r") := max(ifelse(!!sym("importer") == inp_cr0(), !!sym("e"), NA), na.rm = TRUE)) %>%
+      arrange(!!sym("importer"))
 
-    gc()
+    wt$inc(0.03)
 
-    # return(
-    #   # TODO: improve this
-    #   # it's not elegant, but works well with polynomials, logs, etc in formulas
-    #   d[,
-    #     colnames(d) %in%
-    #       c("year", "importer", "exporter", "importer_year", "exporter_year",
-    #         lhs(), rhs(), raw_lhs(), raw_rhs(),
-    #         "imp_exp"
-    #       )
-    #   ]
-    # )
+    dtrade <- dtrade %>%
+      ungroup() %>%
+      mutate(
+        !!sym("exp_year") := paste0(!!sym("exporter"), !!sym("year")),
+        !!sym("imp_year") := paste0(!!sym("importer"), !!sym("year")),
+        !!sym("pair_id_2") := as.character(ifelse(!!sym("exporter") == !!sym("importer"), "0-domestic", !!sym("pair_id")))
+      )
 
-    return(d)
+    wt$inc(0.03)
+
+    dtrade <- dtrade %>%
+      group_by(!!sym("pair_id")) %>%
+      mutate(!!sym("sum_trade") := sum(!!sym("trade"), na.rm = TRUE)) %>%
+      ungroup()
+
+    wt$inc(0.03)
+
+    dtrade
   }) %>%
-    bindCache(
-      inp_y(), inp_r(), inp_p(), inp_t(), inp_z(),
-      inp_d(), inp_c(), inp_s(),
-      fml()
-      # lhs(), rhs(), raw_lhs(), raw_rhs()
-    ) %>%
+    bindCache(inp_d(), inp_y(), inp_yr(), inp_cr()) %>%
     bindEvent(input$go)
 
-  df_dtl_2 <- eventReactive(input$go, {
-    ### 3.8. join with custom data ----
+  ## 3. GE models ----
 
-    if (nrow(custom_data()) > 0) {
-      d <- df_dtl() %>% inner_join(custom_data())
-    } else {
-      d <- df_dtl()
-    }
+  ge_sim <- reactive({
+    # STEP 1 ----
 
-    d <- d %>% select(!!sym("year"), everything())
+    dtrade <- df_dtl()
 
-    return(d)
-  })
-
-  ## 4. Fit model ----
-
-  fit <- eventReactive(input$go, {
-    print("Fitting model...")
-
-    fml <- as.formula(fml())
-
-    if (any(inp_t() == "ols")) {
-      if (inp_c() == "yes") {
-        m <- tryCatch(
-          feols(fml, df_dtl_2(), cluster = ~imp_exp),
-          error = function(e) { custom_regression_error() }
-        )
-      } else {
-        m <- tryCatch(
-          feols(fml, df_dtl_2()),
-          error = function(e) { custom_regression_error() }
-        )
-      }
-    }
-
-    if (inp_t() == "ppml") {
-      if (inp_c() == "yes") {
-        m <- tryCatch(
-          feglm(fml, df_dtl_2(), cluster = ~imp_exp,
-                family = quasipoisson(link = "log")),
-          error = function(e) { custom_regression_error() }
-        )
-      } else {
-        m <- tryCatch(
-          feglm(fml, df_dtl_2(), family = quasipoisson(link = "log")),
-          error = function(e) { custom_regression_error() }
-        )
-      }
-    }
-
-    wt$inc(1)
-    wt$close()
-    gc()
-
-    return(m)
-  })
-
-  ## 5. Simulate ----
-
-  wt2 <- Waitress$new(theme = "overlay-percent", min = 0, max = 10)
-
-  pred_trade_table <- reactive({
-    wt2$notify(position = "br")
-    wt2$inc(1)
-
-    ### model prediction ----
-
-    d1 <-  d <- df_dtl_2() %>%
-      filter(!!sym("exporter") %in% !!inp_rc(), !!sym("year") == !!inp_ry())
-
-    if (length(inp_rc()) > 0) {
-      d1_1 <- d1 %>%
-        select(c("importer", "exporter", "rta")) %>%
-        mutate(
-          rta = case_when(
-            !!sym("exporter") %in% !!inp_rc() & !!sym("importer") %in% !!inp_rc() ~ as.integer(!!inp_rm()),
-            !!sym("importer") %in% !!inp_rc() & !!sym("exporter") %in% !!inp_rc() ~ as.integer(!!inp_rm()),
-            TRUE ~ !!sym("rta")
-          )
-        )
-
-      d1 <- d1 %>%
-        left_join(d1_1, by = c("importer", "exporter")) %>%
-        mutate(
-          rta = case_when(
-            !is.na(!!sym("rta.y")) ~ !!sym("rta.y"),
-            TRUE ~ !!sym("rta.x")
-          )
-        ) %>%
-        select(-ends_with(".x"), -ends_with(".y"))
-    }
-
-    d1 <- d1 %>%
-      mutate(trade = predict(fit(), newdata = d1)) %>%
-      ungroup() %>%
-      group_by(!!sym("exporter")) %>%
-      summarise(trade = sum(!!sym("trade"), na.rm = T)) %>%
-      mutate(observation = "Fitted values")
-
-    wt2$inc(1)
-
-    ### ge prediction ----
-
-    d2 <- df_dtl_2() %>%
-      filter(!!sym("year") == inp_ry()) %>%
-      select(!!sym("exporter"), !!sym("importer"), !!sym("trade"), !!sym("rta"))
-
-    d2_full <- unique(c(d2 %>% distinct(!!sym("exporter")) %>% pull(),
-        d2 %>% distinct(!!sym("importer")) %>% pull()))
-
-    d2 <- expand_grid(exporter = d2_full, importer = d2_full) %>%
-      arrange(!!sym("exporter"), !!sym("importer")) %>%
-      left_join(d2) %>%
-      mutate_if(is.numeric, function(x) ifelse(is.na(x), 0, x))
-
-    rm(d2_full)
-
-    wt2$inc(1)
-
-    if (length(inp_rc()) > 0) {
-      d2_1 <- d2 %>%
-        select(c("importer", "exporter", "rta")) %>%
-        mutate(
-          rta = case_when(
-            !!sym("exporter") %in% !!inp_rc() & !!sym("importer") %in% !!inp_rc() ~ as.integer(!!inp_rm()),
-            !!sym("importer") %in% !!inp_rc() & !!sym("exporter") %in% !!inp_rc() ~ as.integer(!!inp_rm()),
-            TRUE ~ !!sym("rta")
-          )
-        )
-
-      d2 <- d2 %>%
-        left_join(d2_1, by = c("importer", "exporter")) %>%
-        mutate(
-          rta = case_when(
-            !is.na(!!sym("rta.y")) ~ !!sym("rta.y"),
-            TRUE ~ !!sym("rta.x")
-          )
-        ) %>%
-        select(-ends_with(".x"), -ends_with(".y"))
-    }
-
-    wt2$inc(1)
-
-    d2 <- d2 %>%
-      mutate(rta_effect = !!sym("rta") * fit()$coefficients["rta"])
-
-    d2_1 <- ge_gravity(
-      exp_id = d2$exporter,     # Origin country associated with each observation
-      imp_id = d2$importer,     # Destination country associated with each observation
-      flows  = d2$trade + 1000, # Observed trade flows in the data for the year being used as the baseline
-      beta   = d2$rta_effect,   # "Partial" change in trade, obtained as coefficient from gravity estimation
-      theta  = inp_re(),        # Trade elasticity
-      mult   = FALSE,           # Assume trade balance is an additive component of national expenditure
-      data   = d2 %>%
-        select(!!sym("exporter"), !!sym("importer"))
+    error_0rows <- data.frame(
+      error = "No data available for the selected parameters."
     )
 
-    d2_1 <- d2_1 %>%
-      filter(!!sym("exporter") %in% !!inp_rc()) %>%
-      rename(trade = !!sym("new_trade")) %>%
+    error_model <- data.frame(
+      error = "The model cannot be estimated."
+    )
+
+    if (nrow(dtrade) == 0L | !any(inp_yr() %in% inp_y())) {
+      return(error_0rows)
+    }
+
+    wt$inc(0.03)
+
+    ### Step 1: Solve the baseline gravity model ----
+
+    #### Stage 1: Obtain the estimates of pair fixed effects and the effects of RTAs ----
+
+    # With the steps done before, it is straightforward to obtain the PPML regression shown in box #1 from page 112 in @yotov2016advanced.
+
+    fit_baseline_app2 <- try(fepois(
+      trade ~ rta | exp_year + imp_year + pair_id_2,
+      data = filter(dtrade, !!sym("sum_trade") > 0),
+      glm.iter = 500
+    ))
+
+    if (inherits(fit_baseline_app2, "try-error")) {
+      wt$close()
+      return(error_model)
+    }
+
+    wt$inc(0.03)
+
+    # We can construct the variables for !!sym("exporter")-time, !!sym("importer")-time, and internal dyads with the estimated fixed effects from the model.
+
+    dtrade <- dtrade %>%
+      mutate(
+        fe_exporter_bln = fixef(fit_baseline_app2)$exp_year[!!sym("exp_year")],
+        fe_importer_bln = fixef(fit_baseline_app2)$imp_year[!!sym("imp_year")],
+        !!sym("fe_pair_id_2_bln") := fixef(fit_baseline_app2)$pair_id_2[!!sym("pair_id_2")]
+      )
+
+    wt$inc(0.03)
+
+    #### Stage 2: Regress the estimates of pair fixed effects on gravity variables and country fixed effects ----
+
+    # Box #1 from page 113 in @yotov2016advanced can be divided into smaller chunks.
+    # We start by filtering to keep the observation from 1994, and then we compute the !!sym("trade") costs ($\bar{t}_{ij}$ and $t_{ij}^{BLN}$) from the internal dyads fixed effects and the estimated RTA coefficient.
+
+    dtrade <- dtrade %>%
+      mutate(
+        !!sym("tij_bar") := exp(!!sym("fe_pair_id_2_bln")),
+        !!sym("tij_bln") := exp(!!sym("fe_pair_id_2_bln") + fit_baseline_app2$coefficients[!!sym("rta")] * !!sym("rta"))
+      )
+
+    wt$inc(0.03)
+
+    # We need to create a table for the !!sym("year") 1994 and international flows, which we will use to predict the !!sym("trade") costs for the observations with zero !!sym("trade") flows. The reason to create a sub-table, instead of filtering observations in the regression function, is that it eases posterior work to predict the costs.
+
+    ch2_application2_2 <- dtrade %>%
+      filter(!!sym("year") == inp_yr(), !!sym("exporter") != !!sym("importer"))
+
+    wt$inc(0.03)
+
+    # Now, unlike the book, which duplicates $\overline{t_{ij}}$ by creating $t_{ij}$, we can fit a regression to estimate the costs. This is something that emerges from the small differences between expressing an idea in Stata or R.
+
+    fit_costs_app2 <- try(fepois(
+      tij_bar ~ log_dist + cntg + lang + clny | exporter + importer,
+      data = ch2_application2_2,
+      glm.iter = 500
+    ))
+
+    if (inherits(fit_costs_app2, "try-error")) {
+      wt$close()
+      return(error_model)
+    }
+
+    wt$inc(0.03)
+
+    # With the regression, we add the fitted values to the sub-table.
+
+    ch2_application2_2 <- ch2_application2_2 %>%
+      mutate(!!sym("tij_no_rta") := predict(fit_costs_app2, ch2_application2_2)) %>%
+      select(!!sym("exporter"), !!sym("importer"), !!sym("tij_no_rta"))
+
+    wt$inc(0.03)
+
+    # The final step is to keep the observations for the !!sym("year") 1994 in the original table and replace the missing costs with the predicted values.
+
+    dtrade <- dtrade %>%
+      filter(!!sym("year") == inp_yr()) %>%
+      left_join(ch2_application2_2, by = c("exporter", "importer")) %>%
+      mutate(
+        !!sym("tij_bar") := ifelse(is.na(!!sym("tij_bar")), !!sym("tij_no_rta"), !!sym("tij_bar")),
+        !!sym("tij_bln") := ifelse(is.na(!!sym("tij_bln")), !!sym("tij_bar") * exp(fit_baseline_app2$coefficients[!!sym("rta")] * !!sym("rta")), !!sym("tij_bln"))
+      ) %>%
+      select(-!!sym("tij_no_rta"))
+
+    wt$inc(0.03)
+
+    # Box #2 from page 113 in @yotov2016advanced is easier to replicate. The first part of completing Box #2 involves solving the constrained baseline gravity model.
+
+    fit_constrained_app2 <- try(fepois(
+      trade ~ 0 | exporter + importer,
+      data = dtrade,
+      offset = ~ log(tij_bln),
+      glm.iter = 500
+    ))
+
+    if (inherits(fit_constrained_app2, "try-error")) {
+      wt$close()
+      return(error_model)
+    }
+
+    wt$inc(0.03)
+
+    # With the fitted model, we can add the prediction and the $\xi^{BLN}$ column.
+
+    dtrade <- dtrade %>%
+      mutate(!!sym("tradehat_bln") := predict(fit_constrained_app2, dtrade)) %>%
       group_by(!!sym("exporter")) %>%
-      summarise(trade = sum(!!sym("trade"), na.rm = T)) %>%
-      mutate(observation = "GE simulation")
+      mutate(xi_bln = sum(!!sym("tradehat_bln") * (!!sym("exporter") != !!sym("importer")), na.rm = TRUE)) %>%
+      ungroup()
 
-    d2 <- d2 %>%
-      filter(!!sym("exporter") %in% !!inp_rc()) %>%
+    wt$inc(0.03)
+
+    # The book specifies that all other baseline indexes of interest can be obtained by applying the same procedure described in the previous application. Here we will obtain the multilateral resistances terms ($OMR^{BLN}$ and $IMR^{BLN}$) by adding the fixed effects from the constrained model to the data.
+
+    dtrade <- dtrade %>%
+      mutate(
+        !!sym("fe_exporter_cns") := fixef(fit_constrained_app2)$exporter[!!sym("exporter")],
+        !!sym("fe_importer_cns") := fixef(fit_constrained_app2)$importer[!!sym("importer")]
+      )
+
+    wt$inc(0.03)
+
+    dtrade <- dtrade %>%
+      mutate(
+        omr_bln = !!sym("y") * !!sym("e_r") / exp(!!sym("fe_exporter_cns")),
+        imr_bln = !!sym("e") / (exp(!!sym("fe_importer_cns")) * !!sym("e_r"))
+      )
+
+    wt$inc(0.03)
+
+    ### Step II: Define a counterfactual scenario ----
+
+    # Box #1 from page 114 in @yotov2016advanced is direct and consists in replacing the RTA values by zero if the pairs of countries are NAFTA members.
+
+    dtrade <- dtrade %>%
+      mutate(
+        !!sym("no_rta") := ifelse(!!sym("exporter") %in% inp_c() & !!sym("importer") %in% inp_c(), 0, !!sym("rta")),
+        !!sym("tij_cfl") := !!sym("tij_bar") * exp(fit_baseline_app2$coefficients[!!sym("rta")] * !!sym("no_rta"))
+      )
+
+    wt$inc(0.03)
+
+    ### Step III: Solve the counterfactual model ----
+
+    # The same procedure from the previous section applies to obtain the conditional general equilibrium effects and then compute the full endowment general equilibrium effects. We start by fitting a counterfactual model.
+
+    fit_counterfactual_app2 <- try(fepois(
+      trade ~ 0 | exporter + importer,
+      data = dtrade,
+      offset = ~ log(tij_cfl),
+      glm.iter = 500
+    ))
+
+    if (inherits(fit_counterfactual_app2, "try-error")) {
+      wt$close()
+      return(error_model)
+    }
+
+    wt$inc(0.03)
+
+    # With the fitted model we add the fixed effects.
+
+    dtrade <- dtrade %>%
+      mutate(
+        !!sym("fe_exporter_cfl") := fixef(fit_counterfactual_app2)$exporter[!!sym("exporter")],
+        !!sym("fe_importer_cfl") := fixef(fit_counterfactual_app2)$importer[!!sym("importer")]
+      )
+
+    wt$inc(0.03)
+
+    # As we did in stage 2, we compute the multilateral resistance terms.
+
+    dtrade <- dtrade %>%
+      mutate(
+        !!sym("omr_cfl") := !!sym("y") * !!sym("e_r") / exp(!!sym("fe_exporter_cfl")),
+        !!sym("imr_cfl") := !!sym("e") / (exp(!!sym("fe_importer_cfl")) * !!sym("e_r"))
+      )
+
+    wt$inc(0.03)
+
+    # Up to this point, we are ready to compute the conditional general equilibrium effects of !!sym("trade").
+
+    dtrade <- dtrade %>%
+      mutate(!!sym("tradehat_cfl") := predict(fit_counterfactual_app2, dtrade)) %>%
       group_by(!!sym("exporter")) %>%
-      summarise(trade = sum(!!sym("trade"), na.rm = T)) %>%
-      mutate(observation = "Observed trade") %>%
-      bind_rows(d2_1) %>%
-      bind_rows(d1)
+      mutate(xi_cfl = sum(!!sym("tradehat_cfl") * (!!sym("exporter") != !!sym("importer")), na.rm = TRUE)) %>%
+      ungroup()
 
-    print(d2)
+    wt$inc(0.03)
 
-    wt2$inc(1)
+    # Now we are going to compute the full endowment general equilibrium effects. We start by repeating the steps to obtain changes in $t_{ij}$ $\phi$ from the last section.
 
-    wt2$close()
+    dtrade <- dtrade %>%
+      mutate(
+        !!sym("change_tij") := !!sym("tij_cfl") / !!sym("tij_bln"),
+        !!sym("phi") := ifelse(!!sym("importer") == !!sym("exporter"), !!sym("e") / !!sym("y"), 0)
+      ) %>%
+      group_by(!!sym("exporter")) %>%
+      mutate(!!sym("phi") := max(!!sym("phi"), na.rm = TRUE)) %>%
+      ungroup()
 
-    return(d2)
+    wt$inc(0.03)
+
+    # Now we compute changes in $p_i$, $p_j$ and $!!sym("trade")^{CFL}$, which is just a repetition of the previous steps with some adaptation.
+
+    dtrade <- dtrade %>%
+      group_by(!!sym("exporter")) %>%
+      mutate(!!sym("change_p_i") := ((exp(!!sym("fe_exporter_cfl")) / !!sym("e_r")) / (exp(!!sym("fe_exporter_cns")) / !!sym("e_r")))^(1 / (1 - inp_s()))) %>%
+      ungroup() %>%
+      group_by(!!sym("importer")) %>%
+      mutate(
+        !!sym("change_p_j") := ifelse(!!sym("importer") == !!sym("exporter"), !!sym("change_p_i"), 0),
+        !!sym("change_p_j") := max(!!sym("change_p_j"), na.rm = TRUE)
+      ) %>%
+      ungroup()
+
+    wt$inc(0.03)
+
+    dtrade <- dtrade %>%
+      mutate(trade_cfl = !!sym("tradehat_cfl") * !!sym("change_p_i") * !!sym("change_p_j"))
+
+    wt$inc(0.03)
+
+    # Then we need a `while()` loop, but before, we need to duplicate some columns under new names for the loop operations.
+
+    dtrade <- dtrade %>%
+      mutate(
+        !!sym("omr_cfl_0") := !!sym("omr_cfl"),
+        !!sym("imr_cfl_0") := !!sym("imr_cfl"),
+        !!sym("change_imr_full_0") := 1,
+        !!sym("change_omr_full_0") := 1,
+        !!sym("change_p_i_0") := !!sym("change_p_i"),
+        !!sym("change_p_j_0") := !!sym("change_p_j"),
+        !!sym("fe_exporter_cfl_0") := !!sym("fe_exporter_cfl"),
+        !!sym("fe_importer_cfl_0") := !!sym("fe_importer_cfl"),
+        !!sym("tradehat_0") := !!sym("tradehat_cfl"),
+        !!sym("e_r_cfl_0") := !!sym("e_r")
+      )
+
+    wt$inc(0.03)
+
+    # Furthermore, now we run the loop, where the step $N$ depends on the step $N-1$ as in the previous section.
+
+    i2 <- 1
+    while (sd_dif > 1e-3 | max_dif > 1e-3) {
+      dtrade <- dtrade %>%
+        mutate(trade_1 = !!sym("tradehat_0") * !!sym("change_p_i_0") * !!sym("change_p_j_0") / (!!sym("change_omr_full_0") * !!sym("change_imr_full_0")))
+
+      # repeat the counterfactual model
+      fit_counterfactual_app2_2 <- try(fepois(
+        trade_1 ~ 0 | exporter + importer,
+        data = dtrade,
+        offset = ~ log(tij_cfl),
+        glm.iter = 500
+      ))
+
+      if (inherits(fit_counterfactual_app2_2, "try-error")) {
+        wt$close()
+        return(error_model)
+      }
+
+      dtrade <- dtrade %>%
+        mutate(
+          !!sym("fe_exporter_cfl") := fixef(fit_counterfactual_app2_2)$exporter[!!sym("exporter")],
+          !!sym("fe_importer_cfl") := fixef(fit_counterfactual_app2_2)$importer[!!sym("importer")]
+        )
+
+      # compute the conditional general equilibrium effects of !!sym("trade")
+      dtrade <- dtrade %>%
+        mutate(!!sym("tradehat_1") := predict(fit_counterfactual_app2_2, dtrade)) %>%
+        group_by(!!sym("exporter")) %>%
+        mutate(!!sym("y_cfl_1") := sum(!!sym("tradehat_1"), na.rm = TRUE)) %>%
+        ungroup() %>%
+        mutate(!!sym("e_cfl_1") := ifelse(!!sym("importer") == !!sym("exporter"), !!sym("phi") * !!sym("y_cfl_1"), 0)) %>%
+        group_by(!!sym("importer")) %>%
+        mutate(!!sym("e_cfl_1") := max(!!sym("e_cfl_1"), na.rm = TRUE)) %>%
+        ungroup() %>%
+        mutate(
+          !!sym("e_r_cfl_1") := ifelse(!!sym("importer") == inp_cr0(), !!sym("e_cfl_1"), 0),
+          !!sym("e_r_cfl_1") := max(!!sym("e_r_cfl_1"), na.rm = TRUE)
+        )
+
+      # compute the change in prices for exporters and importers
+      dtrade <- dtrade %>%
+        mutate(!!sym("change_p_i_1") := ((exp(!!sym("fe_exporter_cfl")) / !!sym("e_r_cfl_1")) /
+          (exp(!!sym("fe_exporter_cfl_0")) / !!sym("e_r_cfl_0")))^(1 / (1 - inp_s())))
+
+      # compute the change in prices for exporters and importers
+      dtrade <- dtrade %>%
+        group_by(!!sym("importer")) %>%
+        mutate(
+          !!sym("change_p_j_1") := ifelse(!!sym("importer") == !!sym("exporter"), !!sym("change_p_i_1"), 0),
+          !!sym("change_p_j_1") := max(!!sym("change_p_j_1"), na.rm = TRUE)
+        ) %>%
+        ungroup()
+
+      # compute both outward and inward multilateral resistance
+      dtrade <- dtrade %>%
+        mutate(
+          !!sym("omr_cfl_1") := (!!sym("y_cfl_1") * !!sym("e_r_cfl_1")) / exp(!!sym("fe_exporter_cfl")),
+          !!sym("imr_cfl_1") := !!sym("e_cfl_1") / (exp(!!sym("fe_importer_cfl")) * !!sym("e_r_cfl_1"))
+        )
+
+      # update the differences
+      max_dif <- abs(max(dtrade$change_p_i_0 - change_price_i_old, na.rm = TRUE))
+      sd_dif <- sd(dtrade$change_p_i_0 - change_price_i_old)
+      change_price_i_old <- dtrade$change_p_i_0
+
+      # compute changes in outward and inward multilateral resistance
+      dtrade <- dtrade %>%
+        mutate(
+          !!sym("change_omr_full_1") := !!sym("omr_cfl_1") / !!sym("omr_cfl_0"),
+          !!sym("change_imr_full_1") := !!sym("imr_cfl_1") / !!sym("imr_cfl_0"),
+          !!sym("omr_cfl_0") := !!sym("omr_cfl_1"),
+          !!sym("imr_cfl_0") := !!sym("imr_cfl_1"),
+          !!sym("change_omr_full_0") := !!sym("change_omr_full_1"),
+          !!sym("change_imr_full_0") := !!sym("change_imr_full_1"),
+          !!sym("change_p_i_0") := !!sym("change_p_i_1"),
+          !!sym("change_p_j_0") := !!sym("change_p_j_1"),
+          !!sym("fe_exporter_cfl_0") := !!sym("fe_exporter_cfl"),
+          !!sym("fe_importer_cfl_0") := !!sym("fe_importer_cfl"),
+          !!sym("tradehat_0") := !!sym("tradehat_1"),
+          !!sym("e_r_cfl_0") := !!sym("e_r_cfl_1")
+        ) %>%
+        select(-!!sym("fe_exporter_cfl"), -!!sym("fe_importer_cfl"))
+
+      i2 <- i2 + 1
+    }
+
+    wt$inc(0.03)
+
+    # The last loop allows us to obtain changes in $p_i^{full}$, $p_j^{full}$ and $y^{full}$.
+
+    dtrade <- dtrade %>%
+      mutate(
+        !!sym("change_p_i_full") := ((exp(!!sym("fe_exporter_cfl_0")) / !!sym("e_r_cfl_0")) /
+          (exp(!!sym("fe_exporter_cns")) / !!sym("e_r")))^(1 / (1 - inp_s())),
+        !!sym("change_p_j_full") := !!sym("change_p_i_full") * (!!sym("exporter") == !!sym("importer"))
+      ) %>%
+      group_by(!!sym("importer")) %>%
+      mutate(!!sym("change_p_j_full") := max(!!sym("change_p_j_full"), na.rm = TRUE)) %>%
+      ungroup() %>%
+      mutate(!!sym("y_full") := !!sym("change_p_i_full") * !!sym("y"))
+
+    wt$inc(0.03)
+
+    # Now we compute $e^{full} and $!!sym("e_r")^{full}$.
+
+    dtrade <- dtrade %>%
+      mutate(!!sym("e_full") := !!sym("change_p_j_full") * !!sym("e") * (!!sym("exporter") == !!sym("importer"))) %>%
+      group_by(!!sym("importer")) %>%
+      mutate(!!sym("e_full") := max(!!sym("e_full"), na.rm = TRUE)) %>%
+      ungroup() %>%
+      mutate(!!sym("e_full_r") := max(!!sym("e_full") * (!!sym("importer") == inp_cr0()), na.rm = TRUE))
+
+    wt$inc(0.03)
+
+    # We also need `!!sym("omr_full")` and `!!sym("imr_full")`. This part of the code needs *attention* because the IMR full term is computed in a different way compared to the previous section. Please see the script *RTAsEffects.do*.
+
+    dtrade <- dtrade %>%
+      mutate(
+        !!sym("omr_full") := !!sym("y_full") * !!sym("e_r_cfl_0") / exp(!!sym("fe_exporter_cfl_0")),
+        !!sym("imr_full") := !!sym("e_cfl_1") / (exp(!!sym("fe_importer_cfl_0")) * !!sym("e_r_cfl_0"))
+      )
+
+    wt$inc(0.03)
+
+    # To complete this step, we compute $\xi^{full}$.
+
+    dtrade <- dtrade %>%
+      mutate(!!sym("x_full") := (!!sym("y_full") * !!sym("e_full") * !!sym("tij_cfl")) / (!!sym("imr_full") * !!sym("omr_full"))) %>%
+      group_by(!!sym("exporter")) %>%
+      mutate(xi_full = sum(!!sym("x_full") * (!!sym("importer") != !!sym("exporter")), na.rm = TRUE)) %>%
+      ungroup()
+
+    wt$inc(0.03)
+
+    # STEP 4 ----
+
+    indexes_final <- dtrade %>%
+      select(
+        !!sym("exporter"), starts_with("omr_"), !!sym("change_p_i_full"),
+        starts_with("xi_"), !!sym("y"), !!sym("y_full")
+      ) %>%
+      distinct() %>%
+      mutate(!!sym("exporter") := ifelse(!!sym("exporter") == as.character(inp_cr0()), as.character(inp_cr()), !!sym("exporter"))) %>%
+      mutate(
+        !!sym("change_p_i_full") := (1 - !!sym("change_p_i_full")) * 100,
+        change_omr_cfl = ((!!sym("omr_bln") / !!sym("omr_cfl"))^(1 / (1 - as.integer(inp_s()))) - 1) * 100,
+        change_omr_full = ((!!sym("omr_bln") / !!sym("omr_full"))^(1 / (1 - as.integer(inp_s()))) - 1) * 100,
+        change_xi_cfl = (!!sym("xi_bln") / !!sym("xi_cfl") - 1) * 100,
+        change_xi_full = (!!sym("xi_bln") / !!sym("xi_full") - 1) * 100
+      ) %>%
+      select(!!sym("exporter"), starts_with("change"), starts_with("y")) %>%
+      left_join(
+        dtrade %>%
+          select(!!sym("importer"), !!sym("imr_bln"), !!sym("imr_cfl"), !!sym("imr_full")) %>%
+          distinct() %>%
+          mutate(!!sym("importer") := ifelse(!!sym("importer") == as.character(inp_cr0()), as.character(inp_cr()), !!sym("importer"))) %>%
+          mutate(
+            change_imr_cfl = ((!!sym("imr_bln") / !!sym("imr_cfl"))^(1 / (1 - as.integer(inp_s()))) - 1) * 100,
+            change_imr_full = ((!!sym("imr_bln") / !!sym("imr_full"))^(1 / (1 - as.integer(inp_s()))) - 1) * 100
+          ),
+        by = c("exporter" = "importer")
+      ) %>%
+      mutate(
+        rgdp_bln = !!sym("y") / ((!!sym("imr_bln"))^(1 / (1 - as.integer(inp_s())))),
+        rgdp_full = !!sym("y_full") / ((!!sym("imr_full"))^(1 / (1 - as.integer(inp_s())))),
+        change_rgdp_full = (!!sym("rgdp_bln") / !!sym("rgdp_full") - 1) * 100
+      ) %>%
+      select(
+        !!sym("exporter"), !!sym("change_xi_cfl"), !!sym("change_xi_full"),
+        !!sym("change_rgdp_full"), !!sym("change_imr_full"), !!sym("change_omr_full"), !!sym("change_p_i_full")
+      ) %>%
+      mutate_if(is.numeric, function(x) round(x, 2))
+
+    wt$inc(0.03)
+
+    wt$close()
+
+    indexes_final
   }) %>%
-    bindCache(
-      inp_y(), inp_r(), inp_p(), inp_t(), inp_z(),
-      inp_d(), inp_c(), inp_s(),
-      fml(),
-      inp_rc(), inp_rm(), inp_ry(), inp_re()
-    ) %>%
-    bindEvent(input$go2)
+    bindCache(inp_d(), inp_y(), inp_yr(), inp_cr()) %>%
+    bindEvent(input$go)
 
-  pred_trade_plot <- reactive({
-    g <- ggplot(data = pred_trade_table()) +
-      geom_col(aes(x = toupper(!!sym("exporter")), y = !!sym("trade"), fill = !!sym("observation")), position = "dodge2") +
-      labs(x = "Exporter", y = "USD", title = "Observed vs simulated data") +
-      scale_fill_viridis_d() +
-      theme_minimal()
-
-    ggplotly(g)
-  }) %>%
-    bindCache(
-      inp_y(), inp_r(), inp_p(), inp_t(), inp_z(),
-      inp_d(), inp_c(), inp_s(),
-      fml(),
-      inp_rc(), inp_rm(), inp_ry()
-    ) %>%
-    bindEvent(input$go2)
+  output$ge_sim <- renderDataTable({
+    ge_sim()
+  })
 
   # Cite ----
 
@@ -674,184 +622,32 @@ app_server <- function(input, output, session) {
       publisher = {{ESCAP}},
       year = {{2022}},
       month = {{Jul}},
-      note = {{Accessed: { months(Sys.Date()) } { day(Sys.Date()) }, { year(Sys.Date()) }}}}}"
-    )
+      note = {{Accessed: { months(Sys.Date()) } { day(Sys.Date()) }, { year(Sys.Date()) }}}}}")
   })
-
-  # Outputs ----
-
-  ## Dynamic / Server side selectors ----
-
-  updateSelectizeInput(session, "s",
-                       choices = list(
-                         "All Products" = available_all(),
-                         "Vaccine Inputs" = available_vaccine(),
-                         "HS Sections" = available_sections_code(),
-                         "HS Commodities (4-digits)" = available_commodities_short_code(),
-                         "HS Commodities (6-digits)" = available_commodities_code()
-                       ),
-                       selected = "all",
-                       server = TRUE
-  )
-
-  output$rc <- renderUI({
-    # here we update the RTA modification selection after inp_r+inp_p
-    # rp <- unique(as.character(inp_r()), as.character(inp_p()))
-    # if (any(rp == "all")) { rp <- rp[rp != "all"] }
-    # if (length(rp) == 0) { rp <- "all" }
-    rp <- as.character(inp_p())
-
-    selectInput(
-      "rc",
-      "Alter RTAs situation for",
-      choices = available_reporters_iso(),
-      selected = rp,
-      selectize = TRUE,
-      width = "100%",
-      multiple = TRUE
-    ) %>%
-      helper(
-        type = "inline",
-        title = "Alter RTAs situation for",
-        content = c("This corresponds to a 'what if' situation, for example, what would have happened (according
-                              to the model) if the countries you've chosen dropped or subscribed their RTA starting in
-                              a certain year (i.e. what if Chile and China would have subscribed their RTA back in 2002
-                              instead of 2006).",
-                    "",
-                    "<b>References</b>",
-                    "Yotov, Y. V., Piermartini, R., and Larch, M. <i><a href='https://www.wto.org/english/res_e/publications_e/advancedguide2016_e.htm'>An Advanced Guide to Trade Policy Analysis: The Structural Gravity Model</a></i>. WTO iLibrary, 2016."),
-        buttonLabel = "Got it!",
-        easyClose = FALSE,
-        fade = TRUE,
-        size = "s"
-      )
-  })
-
-  output$mc <- renderUI({
-    # here we update the MFA modification selection after inp_r+inp_p
-    rp <- unique(as.character(inp_r()), as.character(inp_p()))
-    if (any(rp == "all")) { rp <- rp[rp != "all"] }
-    if (length(rp) == 0) { rp <- "all" }
-
-    selectInput(
-      "mc",
-      "Alter MFNs situation for",
-      choices = available_reporters_iso(),
-      selected = rp,
-      selectize = TRUE,
-      width = "100%",
-      multiple = TRUE
-    ) %>%
-      helper(
-        type = "inline",
-        title = "Alter MFNs situation for",
-        content = c("This corresponds to a 'what if' situation, for example, what would have happened (according
-                              to the model) if the countries you've chosen increased/decreased their MFN avg rate starting in
-                              a certain year (i.e. what if Chile would have increased their MFN rates to an avg
-                              of 25% since 2020).",
-                    "",
-                    "<b>References</b>",
-                    "Yotov, Y. V., Piermartini, R., and Larch, M. <i><a href='https://www.wto.org/english/res_e/publications_e/advancedguide2016_e.htm'>An Advanced Guide to Trade Policy Analysis: The Structural Gravity Model</a></i>. WTO iLibrary, 2016."),
-        buttonLabel = "Got it!",
-        easyClose = FALSE,
-        fade = TRUE,
-        size = "s"
-      )
-  })
-
-  ## Model ----
-
-  hdata_stl <- eventReactive(input$go, { "Data preview" })
-  fit_stl <- eventReactive(input$go, { "Model summary" })
-  pred_stl <- eventReactive(input$go2, { "Model simulation" })
-
-  output$hdata_stl <- renderText({ hdata_stl() })
-  output$hdata_dtl <- renderTable({ head(df_dtl_2()) })
-  output$fit_stl <- renderText({ fit_stl() })
-  output$fit_tidy <- renderTable({ tidy(fit()) })
-  output$fit_glance <- renderTable({ glance(fit()) })
-  output$fit_cat <- renderPrint({ fit() })
-  output$pred_stl <- renderText({ pred_stl() })
-  output$pred_trade_table <- renderTable({ pred_trade_table() })
-  output$pred_trade_plot <- renderPlotly({ pred_trade_plot() })
-
-  ## Download ----
-
-  dwn_stl <- eventReactive(input$go, { "Download model data" })
-
-  dwn_txt <- eventReactive(input$go, {
-    "Select the correct format for your favourite language or software of choice. The dashboard can export to CSV/TSV/XLSX for Excel or any other software, but also to SAV (SPSS) and DTA (Stata)."
-  })
-
-  dwn_fmt <- eventReactive(input$go, {
-    selectInput(
-      "fmt",
-      "Download data as:",
-      choices = available_formats(),
-      selected = NULL,
-      selectize = TRUE
-    )
-  })
-
-  output$dwn_dtl_pre <- downloadHandler(
-    filename = function() {
-      glue("{ inp_t() }_{ inp_r() }_{ inp_p() }_{ min(inp_y()) }_{ max(inp_y()) }.{ inp_fmt() }")
-    },
-    content = function(filename) {
-      export(df_dtl(), filename)
-    },
-    contentType = "application/zip"
-  )
-
-  output$dwn_fit_pre <- downloadHandler(
-    filename = function() {
-      glue("{ inp_t() }_{ inp_r() }_{ inp_p() }_{ min(inp_y()) }_{ max(inp_y()) }.rds")
-    },
-    content = function(filename) {
-      saveRDS(fit(), filename)
-    },
-    contentType = "application/zip"
-  )
-
-  output$dwn_sim_pre <- downloadHandler(
-    filename = function() {
-      glue("simulation.{ inp_fmt() }")
-    },
-    content = function(filename) {
-      export(pred_trade_table(), filename)
-    },
-    contentType = "application/zip"
-  )
-
-  output$dwn_stl <- renderText({ dwn_stl() })
-  output$dwn_txt <- renderText({ dwn_txt() })
-  output$dwn_fmt <- renderUI({ dwn_fmt() })
-
-  output$dwn_dtl <- renderUI({
-    req(input$go)
-    downloadButton('dwn_dtl_pre', label = 'Detailed data')
-  })
-
-  output$dwn_fit <- renderUI({
-    req(input$go)
-    downloadButton('dwn_fit_pre', label = 'Fitted model')
-  })
-
-  output$dwn_sim <- renderUI({
-    req(input$go2)
-    downloadButton('dwn_sim_pre', label = 'Simulation results')
-  })
-
-  ## Cite ----
 
   output$citation_text <- renderUI({
-    req(input$go)
     HTML(cite_text())
   })
 
   output$citation_bibtex <- renderUI({
-    req(input$go)
     pre(cite_bibtex())
+  })
+
+  # Download ----
+
+  output$dwn_ge_pre <- downloadHandler(
+    filename = function() {
+      glue("{ paste(inp_c(), collapse = '_') }_{ inp_cr() }_{ paste0('0', inp_s() * 10) }_{ min(inp_y()) }_{ max(inp_y()) }.csv")
+    },
+    content = function(filename) {
+      write_csv(ge_sim(), filename)
+    },
+    contentType = "application/csv"
+  )
+
+  output$dwn_ge <- renderUI({
+    req(input$go)
+    downloadButton("dwn_ge_pre", label = "Download GE results")
   })
 
   # Hide boxes until viz is ready ----
@@ -860,10 +656,8 @@ app_server <- function(input, output, session) {
   observeEvent(input$go, {
     if (input$go > 0) {
       show(id = "model_col")
-      show(id = "simulate_col")
     } else {
       hide(id = "model_col")
-      hide(id = "simulate_col")
     }
   })
 
@@ -884,8 +678,7 @@ app_server <- function(input, output, session) {
     rvtl(input)
     setBookmarkExclude(c(
       "shinyhelper-modal_params", "own", "fmt", "sidebarCollapsed", "sidebarItemExpanded",
-      "i", ".clientValue-default-plotlyCrosstalkOpts", "plotly_hover-A", "plotly_afterplot-A",
-      "go", "go2"
+      "i", "go"
     ))
     session$doBookmark()
   })
