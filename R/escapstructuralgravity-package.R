@@ -1,5 +1,4 @@
 #' @keywords internal
-#' @importFrom cachem cache_disk
 "_PACKAGE"
 
 #' params
@@ -23,11 +22,4 @@ NULL
 styles <- list(
   skin_color = "blue",
   css_files = "custom.css"
-)
-
-shiny::shinyOptions(
-  cache = cache_disk(
-    dir = "/tradestatistics/escapstructuralgravity_cache",
-    logfile = "/tradestatistics/log/escapstructuralgravity_cache.log"
-  )
 )
