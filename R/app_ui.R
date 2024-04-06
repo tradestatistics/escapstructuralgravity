@@ -21,7 +21,7 @@ app_ui <- function(request) {
         useShinyjs(),
         useWaitress(),
         sidebarMenu(
-          # menuItem("Welcome", tabName = "welcome"),
+          menuItem("Welcome", tabName = "welcome"),
           menuItem("Model", tabName = "model")
           # menuItem("Cite", tabName = "cite")
         )
@@ -46,7 +46,7 @@ app_ui <- function(request) {
             p(" "),
             h1("How to use this tool"),
             HTML("<p>We provide detailed
-                 <a href='https://gravity.tiid.org/user_instructions.pdf'>instructions</a>
+                 <a href='https://shiny.tradestatistics.io/docs/escapstructuralgravity.pdf'>instructions</a>
                  in PDF format.</p>"),
             h1("Technical details"),
             HTML("<p>This tool allows to run General Equilibrium counterfactual analysis based on the recommentations
