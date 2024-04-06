@@ -150,7 +150,7 @@ app_server <- function(input, output, session) {
 
     dtrade
   }) %>%
-    bindCache(inp_d(), inp_y(), inp_yr(), inp_cr()) %>%
+    # bindCache(inp_d(), inp_y(), inp_yr(), inp_cr()) %>%
     bindEvent(input$go)
 
   ## 3. GE models ----
@@ -596,7 +596,7 @@ app_server <- function(input, output, session) {
 
     indexes_final
   }) %>%
-    bindCache(inp_d(), inp_y(), inp_yr(), inp_cr()) %>%
+    # bindCache(inp_d(), inp_y(), inp_yr(), inp_cr()) %>%
     bindEvent(input$go)
 
   output$ge_sim <- renderDataTable({

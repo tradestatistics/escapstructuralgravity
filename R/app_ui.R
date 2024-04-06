@@ -21,9 +21,9 @@ app_ui <- function(request) {
         useShinyjs(),
         useWaitress(),
         sidebarMenu(
-          menuItem("Welcome", tabName = "welcome"),
-          menuItem("Model", tabName = "model"),
-          menuItem("Cite", tabName = "cite")
+          # menuItem("Welcome", tabName = "welcome"),
+          menuItem("Model", tabName = "model")
+          # menuItem("Cite", tabName = "cite")
         )
       ),
       dashboardBody(
@@ -53,7 +53,7 @@ app_ui <- function(request) {
               in Yotov et al. (2016). The idea is to provide a sort of scientific calculator to change the countries, years, and elasticity of substitution to explore the simulated effects of dropping a Regional Trade Agreement (RTA) in the past.</p>"),
             HTML("<p>Please click play on the video to see a short demonstration on how to use this tool.</p>"),
             HTML("<video controls width='800'>
-                 <source src='https://shiny.tradestatistics.io/images/ppml_demo.mp4' type='video/mp4'>
+                 <source src='https://shiny.tradestatistics.io/images/escapstructuralgravity.mp4' type='video/mp4'>
                  Your browser does not support the video tag.
                  </video>"),
             h1("References"),
@@ -79,7 +79,8 @@ app_ui <- function(request) {
                 selectInput(
                   "d",
                   "Dataset",
-                  choices = c("Advanced Guide to Trade Policy Analysis" = "agtpa", "International Trade and Production Database" = "itpd"),
+                  # choices = c("Advanced Guide to Trade Policy Analysis" = "agtpa", "International Trade and Production Database" = "itpd"),
+                  choices = c("Advanced Guide to Trade Policy Analysis" = "agtpa"),
                   selected = "agtpa",
                   selectize = TRUE,
                   width = "100%",
@@ -310,7 +311,7 @@ golem_add_external_resources <- function() {
     favicon(),
     bundle_resources(
       path = app_sys("app/www"),
-      app_title = "ESCAP - TTC Structural Gravity"
+      app_title = "POL2319"
     )
     # Add here other external resources
     # for example, you can add shinyalert::useShinyalert()
