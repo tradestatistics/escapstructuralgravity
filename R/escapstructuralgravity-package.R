@@ -27,7 +27,7 @@ styles <- list(
 
 shiny::shinyOptions(
   cache = cache_disk(
-    dir = "/tradestatistics/escapstructuralgravity_cache"
+    dir = "/tradestatistics/escapstructuralgravity_cache",
     logfile = "/tradestatistics/log/escapstructuralgravity_cache.log"
   )
 )
